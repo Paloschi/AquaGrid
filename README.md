@@ -85,9 +85,14 @@ One full season (540 days) per pixel. On larger grids the GPU scales better
 
 ## Tests
 
+[![Tests](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml/badge.svg)](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml)
+
 ```bash
 pytest            # parity vs AquaCrop-OSPy, io, grid driver, gpu (if present)
 ```
+
+CI runs the suite on Ubuntu and Windows (Python 3.11 and 3.12) for pull
+requests against `main`. Hosted runners are CPU-only; `test_gpu.py` is skipped.
 
 - `test_parity.py` — single pixel vs AquaCrop-OSPy, 1e-12 tolerance
   (maize/soybean, calendar and GDD, 3 soils).
