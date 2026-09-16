@@ -77,16 +77,14 @@ pixel. Soil: a single AquaCrop preset **or** a per-pixel zarr raster
 
 ## Quick start
 
-Install from Git (no clone required):
+```bash
+pip install aquacrop-grid
+```
+
+From Git (no clone, before or besides PyPI):
 
 ```bash
 pip install "git+https://github.com/Paloschi/aquacrop-grid.git"
-```
-
-Pin a GitHub Release tag when one exists:
-
-```bash
-pip install "git+https://github.com/Paloschi/aquacrop-grid.git@v0.1.0"
 ```
 
 For development, clone and install editable:
