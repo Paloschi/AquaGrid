@@ -1,0 +1,18 @@
+# Exemplo de configuração do AquaCrop-Grid (ver README.md)
+climate: dados/climate.zarr
+sowing: dados/sowing.zarr
+output: dados/output.zarr
+
+crop:
+  name: Maize
+soil:
+  name: SandyLoam          # preset AquaCrop (um perfil para o grid)
+  # zarr: dados/soil.zarr  # alternativa: raster hidráulico ou textura
+  # ksat_unit: cm/d        # default no modo zarr (HiHydroSoil)
+
+backend: cpu          # cpu | gpu
+options:
+  save_daily: false
+  tile: 128
+  parallel: true
+  max_season_days: 400
