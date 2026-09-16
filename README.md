@@ -36,7 +36,6 @@
 [Architecture](#architecture) ·
 [Schema](#io-schema) ·
 [Testing](#testing) ·
-[Releasing](#releasing) ·
 [License](#license-and-attribution)
 
 </div>
@@ -60,7 +59,7 @@ started in [CyMP](https://github.com/Paloschi/CyMP) (Unioeste-LEA).
 | Arrays     | **NumPy**, **xarray**, **zarr**, **Dask**                                  |
 | Reference  | **AquaCrop-OSPy** ≥ 3.0.11 (crop/soil params + parity tests)               |
 | CLI        | **Typer** (`aquacrop-grid`)                                                |
-| Tests      | **pytest** 8 — Ubuntu & Windows, Python 3.11 / 3.12                        |
+| Tests      | **pytest** 8 — Ubuntu, Python 3.12                                         |
 
 **Current scope:** rainfed (no irrigation, no groundwater), one season per
 pixel. Soil: a single AquaCrop preset **or** a per-pixel zarr raster
@@ -271,8 +270,8 @@ pytest            # parity vs AquaCrop-OSPy, io, grid driver, gpu (if present)
 | `test_gpu.py` | CPU vs GPU parity (skipped without CUDA) |
 
 CI (GitHub Actions) runs on every **pull request** against `main`, and again
-on push to `main`: Ubuntu and Windows × Python 3.11 / 3.12. Hosted runners
-are CPU-only; `test_gpu.py` is skipped.
+on push to `main`: Ubuntu, Python 3.12. Hosted runners are CPU-only;
+`test_gpu.py` is skipped.
 
 ---
 
@@ -281,32 +280,6 @@ are CPU-only; `test_gpu.py` is skipped.
 1. Use **conventional commits** (`feat:`, `fix:`, `chore:`, `ci:`, `docs:`).
 2. Put tests in the same change as the behaviour they cover.
 3. Open a pull request against `main` — CI must pass before merge.
-
----
-
-## Releasing
-
-A local `python -m build` does **not** create a GitHub Release. Releases appear
-under [Releases](https://github.com/Paloschi/aquacrop-grid/releases) when a
-version tag is pushed.
-
-1. Bump `version` in [`pyproject.toml`](pyproject.toml) (keep
-   `src/aquacrop_grid/__init__.py` in sync).
-2. Move notes from **Unreleased** to a new section in
-   [`CHANGELOG.md`](CHANGELOG.md).
-3. Merge that change to `main`.
-4. Tag an annotated release matching the version (example: `0.1.0` → `v0.1.0`):
-
-   ```bash
-   git checkout main
-   git pull
-   git tag -a v0.1.0 -m "v0.1.0"
-   git push origin v0.1.0
-   ```
-
-The [release workflow](.github/workflows/release.yml) then runs tests, builds
-sdist + wheel, checks metadata with twine, signs with Sigstore, and attaches
-the files to a GitHub Release. PyPI is not published from this workflow.
 
 ---
 
