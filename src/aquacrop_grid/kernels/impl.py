@@ -1,7 +1,7 @@
 """Backend-neutral AquaCrop kernels operating on per-pixel state.
 
 Vendored and adapted from AquaCrop-OSPy (https://github.com/aquacropos/aquacrop,
-MIT license). Each function is a faithful scalar port of the corresponding
+Apache-2.0). Each function is a faithful scalar port of the corresponding
 ``aquacrop.solution`` module, rewritten to:
 
 * operate on one pixel (state passed in/out as scalars + 1-D compartment views),

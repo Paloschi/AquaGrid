@@ -1,6 +1,6 @@
 """Flatten aquacrop ``Crop``/``Soil`` objects into kernel parameter arrays.
 
-Reuses the ``aquacrop`` package (MIT) for its crop database, soil
+Reuses the ``aquacrop`` package (Apache-2.0) for its crop database, soil
 pedotransfer functions and default parameters; only the flattening and the
 static (weather-independent) parts of ``compute_crop_calendar`` /
 ``compute_variables`` / ``reset_initial_conditions`` are replicated here.

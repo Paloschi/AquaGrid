@@ -119,5 +119,5 @@ date changes each pixel's thermal accumulation), mirroring aquacrop
 
 ## License and attribution
 
-GPL-3.0-or-later. Kernels in `src/aquacrop_grid/kernels/impl.py` are derived
-from [AquaCrop-OSPy](https://github.com/aquacropos/aquacrop) (MIT).
+MIT. Kernels in `src/aquacrop_grid/kernels/impl.py` are derived from
+[AquaCrop-OSPy](https://github.com/aquacropos/aquacrop) (Apache-2.0).
