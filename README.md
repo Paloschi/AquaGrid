@@ -9,6 +9,7 @@
 <br />
 
 [![Tests](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/Paloschi/aquacrop-grid?style=flat-square&color=0F766E)](https://github.com/Paloschi/aquacrop-grid/releases)
 ![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 [![License](https://img.shields.io/badge/license-MIT-0F766E?style=flat-square)](#license-and-attribution)
 
@@ -35,6 +36,7 @@
 [Architecture](#architecture) ·
 [Schema](#io-schema) ·
 [Testing](#testing) ·
+[Releasing](#releasing) ·
 [License](#license-and-attribution)
 
 </div>
@@ -75,6 +77,20 @@ pixel. Soil: a single AquaCrop preset **or** a per-pixel zarr raster
 ---
 
 ## Quick start
+
+Install from Git (no clone required):
+
+```bash
+pip install "git+https://github.com/Paloschi/aquacrop-grid.git"
+```
+
+Pin a GitHub Release tag when one exists:
+
+```bash
+pip install "git+https://github.com/Paloschi/aquacrop-grid.git@v0.1.0"
+```
+
+For development, clone and install editable:
 
 ```bash
 git clone https://github.com/Paloschi/aquacrop-grid.git
@@ -265,6 +281,32 @@ are CPU-only; `test_gpu.py` is skipped.
 1. Use **conventional commits** (`feat:`, `fix:`, `chore:`, `ci:`, `docs:`).
 2. Put tests in the same change as the behaviour they cover.
 3. Open a pull request against `main` — CI must pass before merge.
+
+---
+
+## Releasing
+
+A local `python -m build` does **not** create a GitHub Release. Releases appear
+under [Releases](https://github.com/Paloschi/aquacrop-grid/releases) when a
+version tag is pushed.
+
+1. Bump `version` in [`pyproject.toml`](pyproject.toml) (keep
+   `src/aquacrop_grid/__init__.py` in sync).
+2. Move notes from **Unreleased** to a new section in
+   [`CHANGELOG.md`](CHANGELOG.md).
+3. Merge that change to `main`.
+4. Tag an annotated release matching the version (example: `0.1.0` → `v0.1.0`):
+
+   ```bash
+   git checkout main
+   git pull
+   git tag -a v0.1.0 -m "v0.1.0"
+   git push origin v0.1.0
+   ```
+
+The [release workflow](.github/workflows/release.yml) then runs tests, builds
+sdist + wheel, checks metadata with twine, signs with Sigstore, and attaches
+the files to a GitHub Release. PyPI is not published from this workflow.
 
 ---
 
