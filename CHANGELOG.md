@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- PyPI-friendly README (no HTML wrapper; version badge from PyPI).
+- PyPI-friendly README hero (HTML only inside the centered block; version badge from PyPI).
 - CI matrix again covers Ubuntu and Windows on Python 3.11 and 3.12.
 
 ## [0.1.0] - 2026-09-16
