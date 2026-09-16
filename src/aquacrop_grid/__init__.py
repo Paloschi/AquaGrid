@@ -9,4 +9,4 @@ This is not the official FAO AquaCrop nor an aquacropos/AquaCrop-OSPy
 extension.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
