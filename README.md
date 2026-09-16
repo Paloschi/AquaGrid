@@ -1,32 +1,89 @@
+<div align="center">
+
+[![AquaCrop-Grid](https://img.shields.io/badge/AquaCrop--Grid-raster%20AquaCrop-0F766E?style=for-the-badge&labelColor=134E4A)](https://github.com/Paloschi/aquacrop-grid)
+
 # AquaCrop-Grid
 
-Pixel-wise AquaCrop on rasters: climate as zarr cubes `(time, y, x)`,
-per-pixel sowing dates `(y, x)`, and zarr outputs. Daily-step kernels from
+**Pixel-wise AquaCrop on rasters: zarr in, Numba kernels out — CPU or GPU.**
+
+<br />
+
+[![Tests](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml)
+![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+[![License](https://img.shields.io/badge/license-MIT-0F766E?style=flat-square)](#license-and-attribution)
+
+<br />
+
+![Numba](https://img.shields.io/badge/Numba-CPU%20%7C%20CUDA-00A3E0?style=flat-square)
+![NumPy](https://img.shields.io/badge/NumPy-1.26%2B-013243?style=flat-square&logo=numpy&logoColor=white)
+![xarray](https://img.shields.io/badge/xarray-2024%2B-4D8BBD?style=flat-square)
+![zarr](https://img.shields.io/badge/zarr-2.16%2B-F9C642?style=flat-square&labelColor=1A1A1A)
+![Dask](https://img.shields.io/badge/Dask-2024%2B-FFC107?style=flat-square&logo=dask&logoColor=black)
+![pytest](https://img.shields.io/badge/pytest-8-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
+![AquaCrop-OSPy](https://img.shields.io/badge/AquaCrop--OSPy-3.x-0F766E?style=flat-square)
+
+<br />
+
+![Scope](https://img.shields.io/badge/scope-rainfed%20%7C%20one%20season-134E4A?style=flat-square)
+![Parity](https://img.shields.io/badge/parity-1e--12%20vs%20OSPy-0F766E?style=flat-square)
+[![Conventional Commits](https://img.shields.io/badge/commits-conventional-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
+
+<br />
+
+[Quick start](#quick-start) ·
+[Config](#yaml-config) ·
+[Architecture](#architecture) ·
+[Schema](#io-schema) ·
+[Testing](#testing) ·
+[License](#license-and-attribution)
+
+</div>
+
+---
+
+Climate as zarr cubes `(time, y, x)`, per-pixel sowing dates `(y, x)`, zarr
+outputs. Daily-step kernels from
 [AquaCrop-OSPy](https://github.com/aquacropos/aquacrop) 3.x are vendored and
 recompiled with Numba — `njit` + `prange` on CPU (one thread per pixel) and
 `numba.cuda` on GPU — with **bit-exact parity** against AquaCrop-OSPy
 (`tests/test_parity.py`).
 
-This is not official FAO AquaCrop and not an aquacropos extension. It started
-in [CyMP](https://github.com/Paloschi/CyMP) (Unioeste-LEA).
+This is **not** official FAO AquaCrop and not an aquacropos extension. It
+started in [CyMP](https://github.com/Paloschi/CyMP) (Unioeste-LEA).
 
-Current scope: rainfed (no irrigation, no groundwater), one season per pixel.
-Soil: a single AquaCrop preset **or** a per-pixel zarr raster (HiHydroSoil
-hydraulics or sand/silt/clay texture).
+| Layer      | Stack                                                                      |
+| ---------- | -------------------------------------------------------------------------- |
+| Language   | **Python 3.11+**                                                           |
+| Kernels    | **Numba** (`njit` + `prange` / `numba.cuda`)                               |
+| Arrays     | **NumPy**, **xarray**, **zarr**, **Dask**                                  |
+| Reference  | **AquaCrop-OSPy** ≥ 3.0.11 (crop/soil params + parity tests)               |
+| CLI        | **Typer** (`aquacrop-grid`)                                                |
+| Tests      | **pytest** 8 — Ubuntu & Windows, Python 3.11 / 3.12                        |
 
-## Install
+**Current scope:** rainfed (no irrigation, no groundwater), one season per
+pixel. Soil: a single AquaCrop preset **or** a per-pixel zarr raster
+(HiHydroSoil hydraulics or sand/silt/clay texture).
 
-```bash
-pip install -e .[dev]
-```
+---
 
-GPU: NVIDIA GPU with a CUDA driver (Numba talks to the driver; the full CUDA
-toolkit is not required).
+## Prerequisites
+
+- **Python 3.11+**
+- GPU (optional): NVIDIA GPU with a CUDA **driver** — Numba talks to the
+  driver; the full CUDA toolkit is not required
+
+---
 
 ## Quick start
 
 ```bash
-# 1. synthetic 10x10 pixels / 540 days
+git clone https://github.com/Paloschi/aquacrop-grid.git
+cd aquacrop-grid
+pip install -e ".[dev]"
+```
+
+```bash
+# 1. synthetic 10×10 pixels / 540 days
 aquacrop-grid synth --out ./data
 
 # 2. config
@@ -42,7 +99,7 @@ Output: `output.zarr` with final yield/biomass `(y, x)` and, with
 `save_daily: true`, daily series `(time, y, x)` in group `daily`.
 Full schema: [`docs/zarr-schema.md`](docs/zarr-schema.md).
 
-Programmatic:
+### Programmatic
 
 ```python
 from aquacrop_grid.pipeline import run_grid
@@ -51,6 +108,18 @@ run_grid("climate.zarr", "sowing.zarr", "output.zarr",
          crop_name="Maize", soil_name="SandyLoam",
          backend="cpu", save_daily=False)
 ```
+
+---
+
+## CLI
+
+| Command | Purpose |
+| ------- | ------- |
+| `aquacrop-grid synth -o ./data` | Synthetic climate + sowing zarr for tests |
+| `aquacrop-grid run -c config.yaml` | Gridded simulation from YAML (`-b cpu\|gpu`) |
+| `aquacrop-grid bench` | Throughput (pixels/s), excluding JIT compile |
+
+---
 
 ## YAML config
 
@@ -71,58 +140,135 @@ options:
   max_season_days: 400
 ```
 
+Copy from [`examples/config.example.yaml`](examples/config.example.yaml).
+
+---
+
+## Project structure
+
+```
+aquacrop-grid/
+├── docs/                    # zarr I/O schema
+├── examples/                # sample YAML config
+├── src/aquacrop_grid/
+│   ├── cli.py               # Typer: synth / run / bench
+│   ├── pipeline.py          # zarr in → tiles → zarr out
+│   ├── params.py            # Crop / Soil → kernel arrays
+│   ├── soil_grid.py         # PTF + HiHydro layers → compartments
+│   ├── bench.py
+│   ├── engine/
+│   │   ├── cpu.py           # njit + prange
+│   │   ├── gpu.py           # numba.cuda
+│   │   └── run.py           # shared runner over flat arrays
+│   ├── kernels/
+│   │   ├── impl.py          # daily step (njit / cuda.jit subset)
+│   │   └── loader.py        # compile one source for both backends
+│   └── io/                  # schema, validation, synthetic data
+└── tests/                   # pytest: parity, grid, soil, io, gpu
+```
+
+### Where to look first
+
+| Concern            | Location                                      |
+| ------------------ | --------------------------------------------- |
+| Daily AquaCrop step | `src/aquacrop_grid/kernels/impl.py`          |
+| CPU / GPU backends | `src/aquacrop_grid/engine/`                   |
+| Raster pipeline    | `src/aquacrop_grid/pipeline.py`               |
+| Crop / soil params | `src/aquacrop_grid/params.py`                 |
+| Soil rasters / PTF | `src/aquacrop_grid/soil_grid.py`              |
+| Zarr schema        | [`docs/zarr-schema.md`](docs/zarr-schema.md)  |
+| Bit-exact parity   | `tests/test_parity.py`                        |
+
+---
+
+## Architecture
+
+```
+climate.zarr (time, y, x) + sowing.zarr (y, x)  [+ soil.zarr]
+                         ↓
+                   pipeline.py  (spatial tiles)
+                         ↓
+              params.py  →  kernel arrays
+                         ↓
+              engine/run.py  →  cpu (prange)  |  gpu (cuda)
+                         ↓
+         kernels/impl.py   one source, Numba njit / cuda.jit
+                         ↓
+                    output.zarr
+```
+
+- `kernels/impl.py` — AquaCrop daily step ported to a common `njit` /
+  `cuda.jit` subset (no allocation in kernels, scalar state per pixel +
+  1-D compartment views). One source compiled for both backends by
+  `kernels/loader.py`.
+- `params.py` — flattens aquacrop `Crop` / `Soil` into kernel arrays
+  (weather-independent init, including deepening the profile to
+  `Zmax + 0.1`).
+- GDD phenology is computed **inside the kernel per pixel** (sowing date
+  changes each pixel's thermal accumulation), mirroring aquacrop
+  `compute_crop_calendar`.
+
+---
+
+## I/O schema
+
+| Store    | Shape        | Role |
+| -------- | ------------ | ---- |
+| Climate  | `(time, y, x)` | `tmin`, `tmax`, `precip`, `eto` (daily, gap-free) |
+| Sowing   | `(y, x)`     | `int32` YYYYDDD; `<= 0` = mask |
+| Soil     | name **or** zarr | AquaCrop preset, or hydraulic / texture raster |
+| Output   | `(y, x)`     | yield, biomass, status; optional `daily/` group |
+
+Grids must already be aligned — AquaCrop-Grid does not reproject.
+Details, units, and soil bands: [`docs/zarr-schema.md`](docs/zarr-schema.md).
+
+---
+
 ## Benchmark
 
 `aquacrop-grid bench --pixels 65536 --days 540` (excluding JIT compile):
 
-| backend | reference hardware | throughput |
-|---------|--------------------|-----------|
-| CPU (`njit`+`prange`) | Ryzen (all threads) | ~58k pixels/s |
-| GPU (`numba.cuda`)    | RTX 3060            | ~61k pixels/s |
+| Backend | Reference hardware | Throughput |
+| ------- | ------------------ | ---------- |
+| CPU (`njit` + `prange`) | Ryzen (all threads) | ~58k pixels/s |
+| GPU (`numba.cuda`) | RTX 3060 | ~61k pixels/s |
 
 One full season (540 days) per pixel. On larger grids the GPU scales better
 (climate transfer dominates on small grids).
 
-## Tests
+---
 
-[![Tests](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml/badge.svg)](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml)
+## Testing
+
+[![Tests](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml)
 
 ```bash
 pytest            # parity vs AquaCrop-OSPy, io, grid driver, gpu (if present)
 ```
 
-CI runs the suite on Ubuntu and Windows (Python 3.11 and 3.12) for pull
-requests against `main`. Hosted runners are CPU-only; `test_gpu.py` is skipped.
+| File | What it covers |
+| ---- | -------------- |
+| `test_parity.py` | Single pixel vs AquaCrop-OSPy, 1e-12 (maize/soybean, calendar and GDD, 3 soils) |
+| `test_grid.py` | Mask, per-pixel sowing, tiles, grid vs single-pixel equality |
+| `test_soil.py` | Hydraulic/texture zarr, Saxton–Rawls PTF, per-pixel soil |
+| `test_io.py` | Synthetic I/O, sowing → plant index |
+| `test_gpu.py` | CPU vs GPU parity (skipped without CUDA) |
 
-- `test_parity.py` — single pixel vs AquaCrop-OSPy, 1e-12 tolerance
-  (maize/soybean, calendar and GDD, 3 soils).
-- `test_grid.py` — grid driver: mask, per-pixel sowing, tiles, grid vs
-  single-pixel equality.
-- `test_soil.py` — hydraulic/texture zarr, Saxton–Rawls PTF, per-pixel soil.
-- `test_gpu.py` — CPU vs GPU parity (skipped without CUDA).
+CI (GitHub Actions) runs on every **pull request** against `main`, and again
+on push to `main`: Ubuntu and Windows × Python 3.11 / 3.12. Hosted runners
+are CPU-only; `test_gpu.py` is skipped.
 
-## Architecture
+---
 
-- `src/aquacrop_grid/kernels/impl.py` — AquaCrop daily step ported to a
-  common `njit`/`cuda.jit` subset (no allocation in kernels, scalar state
-  per pixel + 1-D compartment views). One source compiled for both backends
-  by `kernels/loader.py`.
-- `src/aquacrop_grid/params.py` — flattens aquacrop `Crop`/`Soil` into kernel
-  arrays (replicates weather-independent init, including deepening the
-  profile to `Zmax + 0.1`).
-- `src/aquacrop_grid/engine/` — `cpu.py` (prange), `gpu.py` (cuda, state on
-  device), `run.py` (shared runner over flat arrays).
-- `src/aquacrop_grid/pipeline.py` — zarr in → tiles → zarr out.
-- `src/aquacrop_grid/io/` — schema (climate, sowing, soil), validation, and
-  synthetic data.
-- `src/aquacrop_grid/soil_grid.py` — PTF and HiHydro layers → per-pixel
-  compartments.
+## Contributing
 
-The GDD phenology calendar is computed inside the kernel per pixel (sowing
-date changes each pixel's thermal accumulation), mirroring aquacrop
-`compute_crop_calendar`.
+1. Use **conventional commits** (`feat:`, `fix:`, `chore:`, `ci:`, `docs:`).
+2. Put tests in the same change as the behaviour they cover.
+3. Open a pull request against `main` — CI must pass before merge.
+
+---
 
 ## License and attribution
 
-MIT. Kernels in `src/aquacrop_grid/kernels/impl.py` are derived from
-[AquaCrop-OSPy](https://github.com/aquacropos/aquacrop) (Apache-2.0).
+**MIT.** Kernels in `src/aquacrop_grid/kernels/impl.py` are derived from
+[AquaCrop-OSPy](https://github.com/aquacropos/aquacrop) (**Apache-2.0**).
