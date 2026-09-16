@@ -1,43 +1,35 @@
 <div align="center">
-
-[![AquaCrop-Grid](https://img.shields.io/badge/AquaCrop--Grid-raster%20AquaCrop-0F766E?style=for-the-badge&labelColor=134E4A)](https://github.com/Paloschi/aquacrop-grid)
-
-# AquaCrop-Grid
-
-**Pixel-wise AquaCrop on rasters: zarr in, Numba kernels out — CPU or GPU.**
-
-<br />
-
-[![Tests](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/Paloschi/aquacrop-grid?style=flat-square&color=0F766E)](https://github.com/Paloschi/aquacrop-grid/releases)
-![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-[![License](https://img.shields.io/badge/license-MIT-0F766E?style=flat-square)](#license-and-attribution)
-
-<br />
-
-![Numba](https://img.shields.io/badge/Numba-CPU%20%7C%20CUDA-00A3E0?style=flat-square)
-![NumPy](https://img.shields.io/badge/NumPy-1.26%2B-013243?style=flat-square&logo=numpy&logoColor=white)
-![xarray](https://img.shields.io/badge/xarray-2024%2B-4D8BBD?style=flat-square)
-![zarr](https://img.shields.io/badge/zarr-2.16%2B-F9C642?style=flat-square&labelColor=1A1A1A)
-![Dask](https://img.shields.io/badge/Dask-2024%2B-FFC107?style=flat-square&logo=dask&logoColor=black)
-![pytest](https://img.shields.io/badge/pytest-8-0A9EDC?style=flat-square&logo=pytest&logoColor=white)
-![AquaCrop-OSPy](https://img.shields.io/badge/AquaCrop--OSPy-3.x-0F766E?style=flat-square)
-
-<br />
-
-![Scope](https://img.shields.io/badge/scope-rainfed%20%7C%20one%20season-134E4A?style=flat-square)
-![Parity](https://img.shields.io/badge/parity-1e--12%20vs%20OSPy-0F766E?style=flat-square)
-[![Conventional Commits](https://img.shields.io/badge/commits-conventional-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
-
-<br />
-
-[Quick start](#quick-start) ·
-[Config](#yaml-config) ·
-[Architecture](#architecture) ·
-[Schema](#io-schema) ·
-[Testing](#testing) ·
-[License](#license-and-attribution)
-
+<a href="https://github.com/Paloschi/aquacrop-grid"><img alt="AquaCrop-Grid" src="https://img.shields.io/badge/AquaCrop--Grid-raster%20AquaCrop-0F766E?style=for-the-badge&labelColor=134E4A"></a>
+<h1>AquaCrop-Grid</h1>
+<p><strong>Pixel-wise AquaCrop on rasters: zarr in, Numba kernels out — CPU or GPU.</strong></p>
+<p>
+<a href="https://pypi.org/project/aquacrop-grid/"><img alt="PyPI" src="https://img.shields.io/pypi/v/aquacrop-grid.svg?style=flat-square&color=0F766E"></a>
+<a href="https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml/badge.svg?branch=main"></a>
+<img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white">
+<a href="#license-and-attribution"><img alt="License" src="https://img.shields.io/badge/license-MIT-0F766E?style=flat-square"></a>
+</p>
+<p>
+<img alt="Numba" src="https://img.shields.io/badge/Numba-CPU%20%7C%20CUDA-00A3E0?style=flat-square">
+<img alt="NumPy" src="https://img.shields.io/badge/NumPy-1.26%2B-013243?style=flat-square&logo=numpy&logoColor=white">
+<img alt="xarray" src="https://img.shields.io/badge/xarray-2024%2B-4D8BBD?style=flat-square">
+<img alt="zarr" src="https://img.shields.io/badge/zarr-2.16%2B-F9C642?style=flat-square&labelColor=1A1A1A">
+<img alt="Dask" src="https://img.shields.io/badge/Dask-2024%2B-FFC107?style=flat-square&logo=dask&logoColor=black">
+<img alt="pytest" src="https://img.shields.io/badge/pytest-8-0A9EDC?style=flat-square&logo=pytest&logoColor=white">
+<img alt="AquaCrop-OSPy" src="https://img.shields.io/badge/AquaCrop--OSPy-3.x-0F766E?style=flat-square">
+</p>
+<p>
+<img alt="Scope" src="https://img.shields.io/badge/scope-rainfed%20%7C%20one%20season-134E4A?style=flat-square">
+<img alt="Parity" src="https://img.shields.io/badge/parity-1e--12%20vs%20OSPy-0F766E?style=flat-square">
+<a href="https://www.conventionalcommits.org/"><img alt="Conventional Commits" src="https://img.shields.io/badge/commits-conventional-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white"></a>
+</p>
+<p>
+<a href="#quick-start">Quick start</a> ·
+<a href="#yaml-config">Config</a> ·
+<a href="#architecture">Architecture</a> ·
+<a href="#io-schema">Schema</a> ·
+<a href="#testing">Testing</a> ·
+<a href="#license-and-attribution">License</a>
+</p>
 </div>
 
 ---
@@ -59,7 +51,7 @@ started in [CyMP](https://github.com/Paloschi/CyMP) (Unioeste-LEA).
 | Arrays     | **NumPy**, **xarray**, **zarr**, **Dask**                                  |
 | Reference  | **AquaCrop-OSPy** ≥ 3.0.11 (crop/soil params + parity tests)               |
 | CLI        | **Typer** (`aquacrop-grid`)                                                |
-| Tests      | **pytest** 8 — Ubuntu, Python 3.12                                         |
+| Tests      | **pytest** 8 — Ubuntu & Windows, Python 3.11 / 3.12                        |
 
 **Current scope:** rainfed (no irrigation, no groundwater), one season per
 pixel. Soil: a single AquaCrop preset **or** a per-pixel zarr raster
@@ -268,8 +260,8 @@ pytest            # parity vs AquaCrop-OSPy, io, grid driver, gpu (if present)
 | `test_gpu.py` | CPU vs GPU parity (skipped without CUDA) |
 
 CI (GitHub Actions) runs on every **pull request** against `main`, and again
-on push to `main`: Ubuntu, Python 3.12. Hosted runners are CPU-only;
-`test_gpu.py` is skipped.
+on push to `main`: Ubuntu and Windows × Python 3.11 / 3.12. Hosted runners
+are CPU-only; `test_gpu.py` is skipped.
 
 ---
 
