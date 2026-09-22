@@ -29,6 +29,7 @@
 <a href="#architecture">Architecture</a> ·
 <a href="#io-schema">Schema</a> ·
 <a href="#testing">Testing</a> ·
+<a href="#citing-this-project">Citing</a> ·
 <a href="#license-and-attribution">License</a>
 </p>
 </div>
@@ -271,6 +272,25 @@ are CPU-only; `test_gpu.py` is skipped.
 1. Use **conventional commits** (`feat:`, `fix:`, `chore:`, `ci:`, `docs:`).
 2. Put tests in the same change as the behaviour they cover.
 3. Open a pull request against `main` — CI must pass before merge.
+
+---
+
+## Citing this project
+
+If you use AquaCrop-Grid in research or operational work, please cite this repository:
+
+```bibtex
+@software{paloschi_aquacrop_grid,
+  author  = {Paloschi, Rennan Andres},
+  title   = {AquaCrop-Grid: pixel-wise AquaCrop on rasters (Numba CPU/GPU)},
+  year    = {2026},
+  url     = {https://github.com/Paloschi/aquacrop-grid},
+  version = {0.1.0}
+}
+```
+
+Also acknowledge [AquaCrop-OSPy](https://github.com/aquacropos/aquacrop) (and FAO AquaCrop) for the underlying crop water-productivity model that the kernels follow.
+
 
 ---
 
