@@ -7,6 +7,7 @@
 <a href="https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/Paloschi/aquacrop-grid/actions/workflows/test.yml/badge.svg?branch=main"></a>
 <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white">
 <a href="#license-and-attribution"><img alt="License" src="https://img.shields.io/badge/license-MIT-0F766E?style=flat-square"></a>
+<img alt="Visitors" src="https://api.visitorbadge.io/api/visitors?path=github.com%2FPaloschi%2Facquacrop-grid&label=Visitors&countColor=%230F766E&style=flat">
 </p>
 <p>
 <img alt="Numba" src="https://img.shields.io/badge/Numba-CPU%20%7C%20CUDA-00A3E0?style=flat-square">
