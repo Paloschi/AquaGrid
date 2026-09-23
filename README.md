@@ -194,19 +194,9 @@ aquagrid/
 
 ## Architecture
 
-```
-climate.zarr (time, y, x) + sowing.zarr (y, x)  [+ soil.zarr]
-                         ↓
-                   pipeline.py  (spatial tiles)
-                         ↓
-              params.py  →  kernel arrays
-                         ↓
-              engine/run.py  →  cpu (prange)  |  gpu (cuda)
-                         ↓
-         kernels/impl.py   one source, Numba njit / cuda.jit
-                         ↓
-                    output.zarr
-```
+<p align="center">
+<img src="docs/images/architecture.jpg" alt="AquaGrid architecture: climate, sowing and soil zarr in, tiled into crop and soil parameters, one AquaCrop simulation per pixel on Numba CPU or CUDA, written to a zarr output grid" width="920">
+</p>
 
 - `kernels/impl.py` — AquaCrop daily step ported to a common `njit` /
   `cuda.jit` subset (no allocation in kernels, scalar state per pixel +
