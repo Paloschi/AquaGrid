@@ -3,14 +3,14 @@
 See ``docs/zarr-schema.md`` for the full schema definition.
 """
 
-from aquacrop_grid.io.schema import (
+from aquagrid.io.schema import (
     CLIMATE_VARS,
     open_climate,
     open_sowing,
     sowing_to_plant_idx,
     validate_climate,
 )
-from aquacrop_grid.io.soil import (
+from aquagrid.io.soil import (
     ACTIVE_DEPTHS,
     DEPTH_ALIASES,
     HYDRO_SCALE_FACTORS,
@@ -18,7 +18,7 @@ from aquacrop_grid.io.soil import (
     open_soil,
     validate_soil_grid,
 )
-from aquacrop_grid.io.synthetic import generate_synthetic
+from aquagrid.io.synthetic import generate_synthetic
 
 __all__ = [
     "CLIMATE_VARS",

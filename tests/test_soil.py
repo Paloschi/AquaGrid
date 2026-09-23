@@ -9,28 +9,28 @@ import xarray as xr
 
 from aquacrop import Crop, Soil
 
-from aquacrop_grid.engine.run import run_grid_arrays
-from aquacrop_grid.io.soil import (
+from aquagrid.engine.run import run_grid_arrays
+from aquagrid.io.soil import (
     ACTIVE_DEPTHS,
     canonicalize_depth,
     open_soil,
     validate_soil_grid,
 )
-from aquacrop_grid.io.synthetic import (
+from aquagrid.io.synthetic import (
     generate_synthetic,
     synthetic_soil_hydraulic,
     synthetic_soil_texture,
     synthetic_sowing_grid,
 )
-from aquacrop_grid.kernels import constants as C
-from aquacrop_grid.params import (
+from aquagrid.kernels import constants as C
+from aquagrid.params import (
     co2_concentration_for_year,
     crop_params_array,
     initial_water_content,
     soil_params,
 )
-from aquacrop_grid.pipeline import run_grid
-from aquacrop_grid.soil_grid import (
+from aquagrid.pipeline import run_grid
+from aquagrid.soil_grid import (
     curve_number_from_ksat,
     profiles_from_store,
     saxton_rawls,

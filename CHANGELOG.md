@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-22
+
+### Changed
+
+- Rename the project to AquaGrid. The distribution, import, and command are `aquagrid`.
+
 ## [0.1.1] - 2026-09-16
 
 ### Changed
@@ -18,9 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial AquaCrop-Grid package: zarr climate/sowing in, Numba CPU and GPU
+- Initial AquaGrid package: zarr climate/sowing in, Numba CPU and GPU
   kernels, YAML CLI, and pytest suite with bit-exact AquaCrop-OSPy parity.
 
-[Unreleased]: https://github.com/Paloschi/aquacrop-grid/compare/v0.1.1...HEAD
-[0.1.1]: https://github.com/Paloschi/aquacrop-grid/releases/tag/v0.1.1
-[0.1.0]: https://github.com/Paloschi/aquacrop-grid/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Paloschi/aquagrid/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/Paloschi/aquagrid/releases/tag/v0.1.1
+[0.1.0]: https://github.com/Paloschi/aquagrid/releases/tag/v0.1.0

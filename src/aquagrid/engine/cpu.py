@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from numba import njit, prange
 
-from aquacrop_grid.kernels.constants import OF_STATUS, STATUS_NOT_SIMULATED
-from aquacrop_grid.kernels.loader import load_kernels
+from aquagrid.kernels.constants import OF_STATUS, STATUS_NOT_SIMULATED
+from aquagrid.kernels.loader import load_kernels
 
 _RUNNERS: dict = {}
 

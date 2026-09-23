@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from aquacrop_grid.kernels import constants as C
+from aquagrid.kernels import constants as C
 
 
 def prepare_crop(crop) -> None:

@@ -3,8 +3,8 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aquacrop-grid"
-version = "0.1.1"
+name = "aquagrid"
+version = "0.2.0"
 description = "AquaCrop on rasters: zarr in/out, Numba-compiled kernels (CPU/GPU)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -39,13 +39,13 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [project.urls]
-Homepage = "https://github.com/Paloschi/aquacrop-grid"
-Issues = "https://github.com/Paloschi/aquacrop-grid/issues"
-Changelog = "https://github.com/Paloschi/aquacrop-grid/blob/main/CHANGELOG.md"
-Source = "https://github.com/Paloschi/aquacrop-grid"
+Homepage = "https://github.com/Paloschi/aquagrid"
+Issues = "https://github.com/Paloschi/aquagrid/issues"
+Changelog = "https://github.com/Paloschi/aquagrid/blob/main/CHANGELOG.md"
+Source = "https://github.com/Paloschi/aquagrid"
 
 [project.scripts]
-aquacrop-grid = "aquacrop_grid.cli:app"
+aquagrid = "aquagrid.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]

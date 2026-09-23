@@ -8,17 +8,17 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from aquacrop_grid.engine.run import run_grid_arrays
-from aquacrop_grid.io.schema import open_climate, open_sowing, sowing_to_plant_idx
-from aquacrop_grid.io.soil import SoilGrid, open_soil, validate_soil_grid
-from aquacrop_grid.kernels import constants as C
-from aquacrop_grid.params import (
+from aquagrid.engine.run import run_grid_arrays
+from aquagrid.io.schema import open_climate, open_sowing, sowing_to_plant_idx
+from aquagrid.io.soil import SoilGrid, open_soil, validate_soil_grid
+from aquagrid.kernels import constants as C
+from aquagrid.params import (
     co2_concentration_for_year,
     crop_params_array,
     initial_water_content,
     soil_params,
 )
-from aquacrop_grid.soil_grid import profiles_from_store
+from aquagrid.soil_grid import profiles_from_store
 
 FINAL_VARS = {
     # name -> (OF index, dtype)

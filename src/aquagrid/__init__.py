@@ -1,4 +1,4 @@
-"""AquaCrop-Grid: FAO AquaCrop on rasters.
+"""AquaGrid: FAO AquaCrop on rasters.
 
 Runs AquaCrop over raster grids: zarr climate cubes and per-pixel
 sowing-date grids in, yield/biomass/canopy grids out. Compute kernels
@@ -9,4 +9,4 @@ This is not the official FAO AquaCrop nor an aquacropos/AquaCrop-OSPy
 extension.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"

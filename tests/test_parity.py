@@ -1,4 +1,4 @@
-"""Parity tests: AquaCrop-Grid compiled kernels vs AquaCrop-OSPy."""
+"""Parity tests: AquaGrid compiled kernels vs AquaCrop-OSPy."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import pytest
 
 from aquacrop import AquaCropModel, Crop, InitialWaterContent, Soil
 
-from aquacrop_grid.engine.run import run_grid_arrays
-from aquacrop_grid.kernels import constants as C
-from aquacrop_grid.params import (
+from aquagrid.engine.run import run_grid_arrays
+from aquagrid.kernels import constants as C
+from aquagrid.params import (
     co2_concentration_for_year,
     crop_params_array,
     initial_water_content,
@@ -38,7 +38,7 @@ def run_reference(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
 
 def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
                     planting: str):
-    """Run AquaCrop-Grid kernels for a single pixel starting at ``planting``."""
+    """Run AquaGrid kernels for a single pixel starting at ``planting``."""
     start = pd.Timestamp(planting)
     plant_idx = int((weather_df.Date == start).idxmax())
     # weather from planting onward, mirroring the reference clock

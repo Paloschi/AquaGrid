@@ -6,14 +6,14 @@ import time
 
 import numpy as np
 
-from aquacrop_grid.engine.run import run_grid_arrays
-from aquacrop_grid.io.synthetic import synthetic_weather_grid
+from aquagrid.engine.run import run_grid_arrays
+from aquagrid.io.synthetic import synthetic_weather_grid
 
 
 def _inputs(npix: int, days: int, seed: int = 42):
     from aquacrop import Crop, Soil
 
-    from aquacrop_grid.params import (
+    from aquagrid.params import (
         co2_concentration_for_year,
         crop_params_array,
         initial_water_content,

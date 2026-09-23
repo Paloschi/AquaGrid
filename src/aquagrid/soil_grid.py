@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from aquacrop_grid.io.soil import SoilGrid
-from aquacrop_grid.kernels import constants as C
+from aquagrid.io.soil import SoilGrid
+from aquagrid.kernels import constants as C
 
 DEPTH_THICKNESS_M = {
     "0-5": 0.05,

@@ -1,8 +1,8 @@
-# AquaCrop-Grid zarr schema
+# AquaGrid zarr schema
 
 All gridded inputs and outputs are zarr stores read/written with xarray.
 Axis convention: `time` (daily, contiguous), `y`, `x` (any projection;
-AquaCrop-Grid does not reproject — climate and sowing grids must be
+AquaGrid does not reproject — climate and sowing grids must be
 aligned).
 
 ## Climate (input)
