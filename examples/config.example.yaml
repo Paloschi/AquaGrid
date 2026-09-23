@@ -1,4 +1,4 @@
-# AquaCrop-Grid example config (see README.md)
+# AquaGrid example config (see README.md)
 climate: data/climate.zarr
 sowing: data/sowing.zarr
 output: data/output.zarr

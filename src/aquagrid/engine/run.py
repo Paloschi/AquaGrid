@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from aquacrop_grid.kernels.constants import OD_N, OF_N
+from aquagrid.kernels.constants import OD_N, OF_N
 
 _HYDRAULIC = (
     "th_fc", "th_s", "th_wp", "th_dry", "ksat", "tau", "penetrability",
@@ -50,7 +50,7 @@ def run_grid_arrays(
         tmin/tmax/prcp/et0: weather arrays, shape (time, npixel), float64.
         plant_idx: (npixel,) int64 index into the time axis of the sowing
             date for each pixel; negative = do not simulate.
-        cp: crop scalar parameter array (see aquacrop_grid.params).
+        cp: crop scalar parameter array (see aquagrid.params).
         sp: soil scalars, shape (SP_N,) shared or (npixel, SP_N).
         profile: per-compartment arrays. Geometry (``dz``, ``dzsum``,
             ``layer``) is 1-D ``(ncomp,)``. Hydraulic properties may be
@@ -106,11 +106,11 @@ def run_grid_arrays(
     )
 
     if backend == "cpu":
-        from aquacrop_grid.engine.cpu import get_runner
+        from aquagrid.engine.cpu import get_runner
 
         get_runner(parallel=parallel)(*args)
     elif backend == "gpu":
-        from aquacrop_grid.engine.gpu import run_gpu
+        from aquagrid.engine.gpu import run_gpu
 
         run_gpu(*args)
     else:

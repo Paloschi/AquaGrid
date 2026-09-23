@@ -8,9 +8,9 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from aquacrop_grid.io import generate_synthetic, open_climate, open_sowing
-from aquacrop_grid.io.schema import sowing_to_plant_idx
-from aquacrop_grid.pipeline import run_grid
+from aquagrid.io import generate_synthetic, open_climate, open_sowing
+from aquagrid.io.schema import sowing_to_plant_idx
+from aquagrid.pipeline import run_grid
 
 
 NY, NX, DAYS = 6, 5, 400
@@ -62,9 +62,9 @@ def test_grid_matches_single_pixel(grid_run):
     pixel run alone through run_grid_arrays."""
     from aquacrop import Crop, Soil
 
-    from aquacrop_grid.engine.run import run_grid_arrays
-    from aquacrop_grid.kernels import constants as C
-    from aquacrop_grid.params import (
+    from aquagrid.engine.run import run_grid_arrays
+    from aquagrid.kernels import constants as C
+    from aquagrid.params import (
         co2_concentration_for_year,
         crop_params_array,
         initial_water_content,

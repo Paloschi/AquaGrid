@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from aquacrop_grid.engine.run import run_grid_arrays
-from aquacrop_grid.kernels import constants as C
+from aquagrid.engine.run import run_grid_arrays
+from aquagrid.kernels import constants as C
 
 cuda_available = False
 try:
@@ -26,7 +26,7 @@ def grid_inputs(weather_df):
     """A small multi-pixel problem with per-pixel sowing and a masked pixel."""
     from aquacrop import Crop, Soil
 
-    from aquacrop_grid.params import (
+    from aquagrid.params import (
         co2_concentration_for_year,
         crop_params_array,
         initial_water_content,

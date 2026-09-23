@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from aquacrop_grid.io import (
+from aquagrid.io import (
     generate_synthetic,
     open_climate,
     open_sowing,

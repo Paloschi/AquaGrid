@@ -1,6 +1,6 @@
 """Compile the backend-neutral kernel source for a given backend.
 
-The kernel source in :mod:`aquacrop_grid.kernels.impl` is written in a common
+The kernel source in :mod:`aquagrid.kernels.impl` is written in a common
 subset of what ``numba.njit`` and ``numba.cuda.jit`` support. This module
 exec's that source with the appropriate ``kernel`` decorator injected,
 producing an independent, fully-jitted namespace per backend.
@@ -19,7 +19,7 @@ def load_kernels(backend: str = "cpu") -> dict:
     if backend in _CACHE:
         return _CACHE[backend]
 
-    import aquacrop_grid.kernels.impl as impl_mod
+    import aquagrid.kernels.impl as impl_mod
 
     if backend == "cpu":
         from numba import njit
@@ -37,7 +37,7 @@ def load_kernels(backend: str = "cpu") -> dict:
         raise ValueError(f"unknown backend: {backend!r}")
 
     src = inspect.getsource(impl_mod)
-    ns: dict = {"kernel": kernel, "__name__": f"aquacrop_grid.kernels.impl_{backend}"}
+    ns: dict = {"kernel": kernel, "__name__": f"aquagrid.kernels.impl_{backend}"}
     code = compile(src, impl_mod.__file__, "exec")
     exec(code, ns)
 

@@ -7,14 +7,14 @@ Apache-2.0). Each function is a faithful scalar port of the corresponding
 * operate on one pixel (state passed in/out as scalars + 1-D compartment views),
 * avoid allocations, numpy vector ops and strings (CUDA-compatible subset),
 * read crop/soil parameters from flat float64 arrays indexed by the
-  constants in :mod:`aquacrop_grid.kernels.constants`.
+  constants in :mod:`aquagrid.kernels.constants`.
 
 Scope (phase 1): rainfed simulations, no groundwater table, no irrigation,
 no field management (bunds/mulches), CO2 adjustment precomputed on the
 Python side. Calendar per pixel is computed inside the kernel from the
 pixel's own temperature series (GDD mode) starting at its sowing date.
 
-The module is compiled twice by :mod:`aquacrop_grid.kernels.loader`: with
+The module is compiled twice by :mod:`aquagrid.kernels.loader`: with
 ``numba.njit`` for the CPU backend and ``numba.cuda.jit(device=True)`` for
 the GPU backend. The ``kernel`` decorator is injected by the loader; the
 fallback below keeps the module importable (and testable) in pure Python.
@@ -22,7 +22,7 @@ fallback below keeps the module importable (and testable) in pure Python.
 
 import math
 
-from aquacrop_grid.kernels.constants import (
+from aquagrid.kernels.constants import (
     CP_GDD_METHOD, CP_T_UPP, CP_T_BASE,
     CP_ZMIN, CP_ZMAX, CP_PCT_ZMIN, CP_FSHAPE_R, CP_FSHAPE_EX,
     CP_SX_TOP, CP_SX_BOT,
@@ -2091,7 +2091,7 @@ def compute_calendar_cds(cp, tmin2d, tmax2d, p, plant_idx, nt):
     hi_start_cd, hi_end_cd, yld_form_cd, flowering_cd)."""
     if cp[CP_CALENDAR_TYPE] == 1:
         # all calendar-day values are weather-independent and prepared on
-        # the Python side (see aquacrop_grid.params)
+        # the Python side (see aquagrid.params)
         return (True, cp[CP_MATURITY_CD], cp[CP_MAX_CANOPY_CD],
                 cp[CP_CANOPY_DEV_END_CD], cp[CP_HI_START_CD],
                 cp[CP_HI_END_CD], cp[CP_YLD_FORM_CD], cp[CP_FLOWERING_CD])

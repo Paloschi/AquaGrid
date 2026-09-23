@@ -1,4 +1,4 @@
-"""AquaCrop-Grid command-line interface."""
+"""AquaGrid command-line interface."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-app = typer.Typer(help="AquaCrop-Grid - AquaCrop on rasters (zarr in/out, Numba CPU/GPU)")
+app = typer.Typer(help="AquaGrid - AquaCrop on rasters (zarr in/out, Numba CPU/GPU)")
 
 
 @app.command()
@@ -15,7 +15,7 @@ def run(
     backend: str = typer.Option("cpu", "--backend", "-b", help="cpu | gpu"),
 ):
     """Run a gridded AquaCrop simulation described by a YAML config."""
-    from aquacrop_grid.pipeline import run_from_config
+    from aquagrid.pipeline import run_from_config
 
     out = run_from_config(config, backend=backend)
     typer.echo(f"results written to {out}")
@@ -29,7 +29,7 @@ def synth(
     days: int = typer.Option(540, help="Length of the daily time axis"),
 ):
     """Generate a small synthetic zarr dataset for testing."""
-    from aquacrop_grid.io.synthetic import generate_synthetic
+    from aquagrid.io.synthetic import generate_synthetic
 
     generate_synthetic(out, ny=ny, nx=nx, days=days)
     typer.echo(f"synthetic data written to {out}")
@@ -42,7 +42,7 @@ def bench(
     backend: str = typer.Option("both", help="cpu | gpu | both"),
 ):
     """Benchmark simulation throughput (pixels/s) on CPU and/or GPU."""
-    from aquacrop_grid.bench import benchmark
+    from aquagrid.bench import benchmark
 
     backends = ("cpu", "gpu") if backend == "both" else (backend,)
     benchmark(npix=pixels, days=days, backends=backends)
