@@ -34,6 +34,10 @@
 </p>
 </div>
 
+<p align="center">
+<img src="docs/images/example-field.png" alt="Soybean field at 30 m: MapBiomas Solo collection 3 clay on the left, AquaCrop dry yield on the right" width="920">
+</p>
+
 ---
 
 Climate as zarr cubes `(time, y, x)`, per-pixel sowing dates `(y, x)`, zarr
