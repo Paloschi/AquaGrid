@@ -33,7 +33,7 @@ def get_runner(parallel: bool = True):
                 out_final[p, OF_STATUS] = STATUS_NOT_SIMULATED
             else:
                 run_pixel(p, pi, nt, tmin2d, tmax2d, prcp2d, et02d,
-                          cp, sp[p], ncomp, nlayer,
+                          cp[p], sp[p], ncomp, nlayer,
                           dz, dzsum, th_fc[p], th_s[p], th_wp[p], th_dry[p],
                           ksat[p], tau[p],
                           layer, penetrability[p], th_init[p],

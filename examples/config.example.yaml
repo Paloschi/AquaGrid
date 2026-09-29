@@ -5,6 +5,7 @@ output: data/output.zarr
 
 crop:
   name: Maize
+  # zarr: data/crop.zarr   # optional (param, y, x) overrides per pixel
 soil:
   name: SandyLoam          # AquaCrop preset (one profile for the grid)
   # zarr: data/soil.zarr   # alternative: hydraulic or texture raster

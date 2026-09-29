@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from aquagrid.kernels.constants import OD_N, OF_N
+from aquagrid.kernels.constants import CP_N, OD_N, OF_N
 
 _HYDRAULIC = (
     "th_fc", "th_s", "th_wp", "th_dry", "ksat", "tau", "penetrability",
@@ -50,7 +50,7 @@ def run_grid_arrays(
         tmin/tmax/prcp/et0: weather arrays, shape (time, npixel), float64.
         plant_idx: (npixel,) int64 index into the time axis of the sowing
             date for each pixel; negative = do not simulate.
-        cp: crop scalar parameter array (see aquagrid.params).
+        cp: crop parameters, shape (CP_N,) shared or (npixel, CP_N).
         sp: soil scalars, shape (SP_N,) shared or (npixel, SP_N).
         profile: per-compartment arrays. Geometry (``dz``, ``dzsum``,
             ``layer``) is 1-D ``(ncomp,)``. Hydraulic properties may be
@@ -71,6 +71,9 @@ def run_grid_arrays(
     et0 = np.ascontiguousarray(et0, f8)
     plant_idx = np.ascontiguousarray(plant_idx, np.int64)
 
+    cp2 = _pixel_rows(cp, npix, "cp")
+    if cp2.shape[1] != CP_N:
+        raise ValueError(f"cp has {cp2.shape[1]} parameters, expected {CP_N}")
     sp2 = _pixel_rows(sp, npix, "sp")
     thini = _pixel_rows(th_init, npix, "th_init")
     hyd = {k: _pixel_rows(profile[k], npix, k) for k in _HYDRAULIC}
@@ -94,7 +97,7 @@ def run_grid_arrays(
 
     args = (
         plant_idx, nt, tmin, tmax, prcp, et0,
-        np.ascontiguousarray(cp, f8), sp2,
+        cp2, sp2,
         ncomp, nlayer,
         geom["dz"], geom["dzsum"],
         hyd["th_fc"], hyd["th_s"], hyd["th_wp"], hyd["th_dry"],

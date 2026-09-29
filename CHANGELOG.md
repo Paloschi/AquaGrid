@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Optional crop-parameter zarr `(param, y, x)` so each pixel can override AquaCrop crop attributes.
+
 ## [0.2.0] - 2026-09-22
 
 ### Changed

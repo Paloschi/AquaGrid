@@ -74,6 +74,27 @@ silt only checks that the sum is ≈ 100%).
 A pixel with NaN in the soil is not simulated (`status = 1`), even if sowing
 is valid.
 
+## Crop parameters (input, optional)
+
+Store aligned to climate with one data variable `crop` and dims
+`(param, y, x)`. Each `param` name is an AquaCrop `Crop` attribute already
+stored in the kernel vector (`HI0`, `WP`, `Zmax`, `Maturity`, `CGC`, …).
+Any name in that map is accepted. A name outside it is an error.
+
+Three AquaCrop vectors of length 4 are one layer each: `p_up1`–`p_up4`,
+`p_lo1`–`p_lo4`, `fshape_w1`–`fshape_w4`.
+
+`fCO2` and the CO2 concentration are not layers; they come from the sowing
+year. Names ending in `CD` (`MaturityCD`, …) are not layers either. On a
+calendar-day pixel (`CalendarType` 1), an override of `Maturity`,
+`MaxCanopy`, `CanopyDevEnd`, `HIstart`, `HIend`, `YldForm`, or `Flowering`
+is copied into the matching calendar-day slot.
+
+`crop_name` is still required. A missing layer, or a NaN cell, keeps that
+parameter from the named crop. A NaN does not mask the pixel. Without this
+store every pixel uses the named crop alone. Soil compartments are deepened
+to the deepest finite `Zmax` in the cube.
+
 ## Outputs
 
 Zarr store with:

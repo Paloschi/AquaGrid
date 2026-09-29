@@ -106,3 +106,82 @@ def test_grid_matches_single_pixel(grid_run):
         fin[0, C.OF_DRY_YIELD], rel=1e-6)
     assert res.biomass.values[y, x] == pytest.approx(
         fin[0, C.OF_BIOMASS], rel=1e-6)
+
+
+def test_crop_cube_hi0_scales_yield(tmp_path):
+    """A per-pixel HI0 override scales dry yield against the named crop."""
+    from aquacrop import Crop
+
+    from aquagrid.io import generate_synthetic
+    from aquagrid.kernels import constants as C
+    from aquagrid.params import crop_params_array, co2_concentration_for_year
+
+    generate_synthetic(tmp_path, ny=1, nx=2, days=250, seed=1)
+    sow = xr.open_zarr(tmp_path / "sowing.zarr")
+    sow["sowing"] = (("y", "x"), np.array([[2019135, 2019135]], np.int32))
+    sow.to_zarr(tmp_path / "sowing.zarr", mode="w")
+
+    base = run_grid(
+        tmp_path / "climate.zarr", tmp_path / "sowing.zarr",
+        tmp_path / "base.zarr", "Maize", "SandyLoam", parallel=False,
+    )
+    crop = Crop("Maize", planting_date="05/15")
+    hi0 = float(crop_params_array(
+        crop, co2_concentration_for_year(2019))[C.CP_HI0])
+    cube = xr.Dataset(
+        {"crop": (("param", "y", "x"), np.array([[[hi0, hi0 * 0.5]]], np.float32))},
+        coords={"param": ["HI0"], "y": [0], "x": [0, 1]},
+    )
+    cube.to_zarr(tmp_path / "crop.zarr", mode="w")
+    varied = run_grid(
+        tmp_path / "climate.zarr", tmp_path / "sowing.zarr",
+        tmp_path / "varied.zarr", "Maize", "SandyLoam",
+        crop_zarr=tmp_path / "crop.zarr", parallel=False,
+    )
+    base_y = xr.open_zarr(base).dry_yield.values
+    varied_y = xr.open_zarr(varied).dry_yield.values
+    assert varied_y[0, 0] == pytest.approx(base_y[0, 0], rel=1e-5)
+    assert varied_y[0, 1] / varied_y[0, 0] == pytest.approx(0.5, rel=0.15)
+
+
+def test_apply_crop_cube_nan_unknown_and_calendar_cd():
+    from aquagrid.kernels import constants as C
+    from aquagrid.params import apply_crop_cube
+
+    base = np.zeros(C.CP_N)
+    base[C.CP_HI0] = 0.4
+    base[C.CP_CALENDAR_TYPE] = 1
+    base[C.CP_MATURITY] = 100
+    base[C.CP_MATURITY_CD] = 100
+
+    hi = xr.DataArray(
+        np.array([[[0.5, np.nan]]], np.float64),
+        dims=("param", "y", "x"),
+        coords={"param": ["HI0"], "y": [0], "x": [0, 1]},
+    )
+    out = apply_crop_cube(base, hi)
+    assert out[0, 0, C.CP_HI0] == pytest.approx(0.5)
+    assert out[0, 1, C.CP_HI0] == pytest.approx(0.4)
+
+    bad = hi.assign_coords(param=["NotAParam"])
+    with pytest.raises(ValueError, match="unknown crop parameter"):
+        apply_crop_cube(base, bad)
+
+    maturity = xr.DataArray(
+        np.array([[[80.0, np.nan]]], np.float64),
+        dims=("param", "y", "x"),
+        coords={"param": ["Maturity"], "y": [0], "x": [0, 1]},
+    )
+    out = apply_crop_cube(base, maturity)
+    assert out[0, 0, C.CP_MATURITY] == pytest.approx(80)
+    assert out[0, 0, C.CP_MATURITY_CD] == pytest.approx(80)
+    assert out[0, 1, C.CP_MATURITY] == pytest.approx(100)
+    assert out[0, 1, C.CP_MATURITY_CD] == pytest.approx(100)
+
+    gdd = base.copy()
+    gdd[C.CP_CALENDAR_TYPE] = 2
+    gdd[C.CP_MATURITY_CD] = 7
+    out = apply_crop_cube(gdd, maturity)
+    assert out[0, 0, C.CP_MATURITY] == pytest.approx(80)
+    assert out[0, 0, C.CP_MATURITY_CD] == pytest.approx(7)
+
