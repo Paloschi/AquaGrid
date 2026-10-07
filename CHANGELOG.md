@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Read `__version__` from the installed package metadata. The 0.3.0 wheel still reported 0.2.0.
+- Point the license attribution and the README citation at the 0.3.0 tree.
+
 ## [0.3.0] - 2026-10-07
 
 ### Added

@@ -9,4 +9,9 @@ This is not the official FAO AquaCrop nor an aquacropos/AquaCrop-OSPy
 extension.
 """
 
-__version__ = "0.2.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("aquagrid")
+except PackageNotFoundError:
+    __version__ = "0.3.0"
