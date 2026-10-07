@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cap supported Python at 3.11 and 3.12 (`requires-python` is `>=3.11,<3.13`), the interpreters the release workflow runs.
 - Publish the GitHub Release from this section, after PyPI accepts the files.
 - Document every `run_from_config` key and the four output `status` codes.
+- Lock the status comment, the `run_grid` docstring, the release changelog pattern, and the README Python lines to the kernel and the CI matrix.
 
 ## [0.3.0] - 2026-10-07
 

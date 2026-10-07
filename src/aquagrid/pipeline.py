@@ -131,17 +131,21 @@ def run_grid(
 
     ``sowing_var`` is the variable in the sowing store (default
     ``sowing``). ``initial_wc`` is ``FC``, ``WP`` or ``SAT`` on either
-    soil mode. A pixel is not simulated when sowing is ``<= 0``, the
-    sowing date falls outside the climate time axis, or the soil is NaN
-    (status 1).
+    soil mode. Status 1: sowing is ``<= 0``, the sowing date falls
+    outside the climate ``time`` axis, or the soil pixel is NaN. Other
+    final fields stay 0.
 
     ``backend`` is ``cpu`` or ``gpu``. ``tile`` is the tile edge in
     pixels. ``parallel`` runs one CPU thread per pixel; the GPU backend
     ignores it. ``evap_time_steps`` is the number of soil-evaporation
     substeps per day. ``max_season_days`` caps days after planting.
-    Reaching that cap, maturity, or canopy death records status 0. Status
-    3 means the climate series ended before any of those. The schema
-    lists all four codes.
+    Status 0: the crop reached maturity, the canopy died, or days after
+    planting reached ``max_season_days``. Status 2: ``CalendarType`` 2
+    and growing degree-days never rise strictly above maturity, or that
+    crossing falls on day 365 or later. A calendar-day crop
+    (``CalendarType`` 1) keeps the calendar prepared in Python. Other
+    final fields stay 0. Status 3: the climate series ended before
+    maturity, canopy death, or the ``max_season_days`` cap.
     """
     from aquacrop import Crop, Soil
 
