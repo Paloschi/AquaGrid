@@ -9,6 +9,7 @@ static (weather-independent) parts of ``compute_crop_calendar`` /
 from __future__ import annotations
 
 import numpy as np
+import xarray as xr
 
 from aquagrid.kernels import constants as C
 
@@ -235,6 +236,133 @@ def crop_params_array(crop, co2_conc: float, co2_ref: float = 369.41,
     cp[C.CP_HI_END_CD] = crop.HIendCD
 
     return cp
+
+
+# Cube layer name -> kernel slot. Length-4 crop vectors are split.
+CROP_PARAM_INDEX: dict[str, int] = {
+    "GDDmethod": C.CP_GDD_METHOD,
+    "Tupp": C.CP_T_UPP,
+    "Tbase": C.CP_T_BASE,
+    "Zmin": C.CP_ZMIN,
+    "Zmax": C.CP_ZMAX,
+    "PctZmin": C.CP_PCT_ZMIN,
+    "fshape_r": C.CP_FSHAPE_R,
+    "fshape_ex": C.CP_FSHAPE_EX,
+    "SxTop": C.CP_SX_TOP,
+    "SxBot": C.CP_SX_BOT,
+    "p_up1": C.CP_P_UP0,
+    "p_up2": C.CP_P_UP1,
+    "p_up3": C.CP_P_UP2,
+    "p_up4": C.CP_P_UP3,
+    "p_lo1": C.CP_P_LO0,
+    "p_lo2": C.CP_P_LO1,
+    "p_lo3": C.CP_P_LO2,
+    "p_lo4": C.CP_P_LO3,
+    "fshape_w1": C.CP_FSHAPE_W0,
+    "fshape_w2": C.CP_FSHAPE_W1,
+    "fshape_w3": C.CP_FSHAPE_W2,
+    "fshape_w4": C.CP_FSHAPE_W3,
+    "ETadj": C.CP_ET_ADJ,
+    "beta": C.CP_BETA,
+    "GermThr": C.CP_GERM_THR,
+    "PlantMethod": C.CP_PLANT_METHOD,
+    "CalendarType": C.CP_CALENDAR_TYPE,
+    "Emergence": C.CP_EMERGENCE,
+    "MaxRooting": C.CP_MAX_ROOTING,
+    "Senescence": C.CP_SENESCENCE,
+    "Maturity": C.CP_MATURITY,
+    "HIstart": C.CP_HI_START,
+    "Flowering": C.CP_FLOWERING,
+    "YldForm": C.CP_YLD_FORM,
+    "CanopyDevEnd": C.CP_CANOPY_DEV_END,
+    "Canopy10Pct": C.CP_CANOPY_10PCT,
+    "MaxCanopy": C.CP_MAX_CANOPY,
+    "HIend": C.CP_HI_END,
+    "FloweringEnd": C.CP_FLOWERING_END,
+    "CC0": C.CP_CC0,
+    "CGC": C.CP_CGC,
+    "CDC": C.CP_CDC,
+    "CCx": C.CP_CCX,
+    "Kcb": C.CP_KCB,
+    "fage": C.CP_FAGE,
+    "a_Tr": C.CP_A_TR,
+    "TrColdStress": C.CP_TR_COLD_STRESS,
+    "GDD_up": C.CP_GDD_UP,
+    "GDD_lo": C.CP_GDD_LO,
+    "LagAer": C.CP_LAG_AER,
+    "Aer": C.CP_AER,
+    "HIini": C.CP_HI_INI,
+    "HI0": C.CP_HI0,
+    "CropType": C.CP_CROP_TYPE,
+    "Determinant": C.CP_DETERMINANT,
+    "WP": C.CP_WP,
+    "WPy": C.CP_WPY,
+    "dHI_pre": C.CP_DHI_PRE,
+    "CCmin": C.CP_CC_MIN,
+    "exc": C.CP_EXC,
+    "dHI0": C.CP_DHI0,
+    "a_HI": C.CP_A_HI,
+    "b_HI": C.CP_B_HI,
+    "YldWC": C.CP_YLD_WC,
+    "PolHeatStress": C.CP_POL_HEAT_STRESS,
+    "Tmax_lo": C.CP_TMAX_LO,
+    "Tmax_up": C.CP_TMAX_UP,
+    "fshape_b": C.CP_FSHAPE_B,
+    "PolColdStress": C.CP_POL_COLD_STRESS,
+    "Tmin_up": C.CP_TMIN_UP,
+    "Tmin_lo": C.CP_TMIN_LO,
+}
+
+# GDD stages scaled with Maturity so a shorter cycle stays internally consistent.
+PHENOLOGY_WITH_MATURITY = (
+    "Emergence", "Flowering", "Senescence", "MaxRooting", "HIstart", "YldForm",
+    "CanopyDevEnd", "Canopy10Pct", "MaxCanopy", "HIend", "FloweringEnd",
+)
+
+# Calendar-day crops (CalendarType == 1) end the season from these slots.
+_CALENDAR_CD_SLOT = {
+    "Maturity": C.CP_MATURITY_CD,
+    "MaxCanopy": C.CP_MAX_CANOPY_CD,
+    "CanopyDevEnd": C.CP_CANOPY_DEV_END_CD,
+    "HIstart": C.CP_HI_START_CD,
+    "HIend": C.CP_HI_END_CD,
+    "YldForm": C.CP_YLD_FORM_CD,
+    "Flowering": C.CP_FLOWERING_CD,
+}
+
+
+def apply_crop_cube(base: np.ndarray, cube: xr.DataArray) -> np.ndarray:
+    """Broadcast ``base`` ``(CP_N,)`` over a ``(param, y, x)`` cube.
+
+    Missing layers and NaN cells keep the base value. For a calendar-day
+    pixel, an override of ``Maturity``, ``MaxCanopy``, ``CanopyDevEnd``,
+    ``HIstart``, ``HIend``, ``YldForm``, or ``Flowering`` is copied into the
+    matching ``*CD`` slot. Returns ``(y, x, CP_N)``.
+    """
+    if set(cube.dims) != {"param", "y", "x"}:
+        raise ValueError(
+            f"crop cube dims must be (param, y, x), got {cube.dims}")
+    cube = cube.transpose("param", "y", "x")
+    ny, nx = cube.sizes["y"], cube.sizes["x"]
+    out = np.broadcast_to(base, (ny, nx, base.shape[0])).copy()
+    names = [str(name) for name in cube.param.values]
+    unknown = [name for name in names if name not in CROP_PARAM_INDEX]
+    if unknown:
+        raise ValueError(f"unknown crop parameter(s): {unknown}")
+    finite = {}
+    for name in names:
+        layer = np.asarray(cube.sel(param=name).values, np.float64)
+        good = np.isfinite(layer)
+        out[:, :, CROP_PARAM_INDEX[name]][good] = layer[good]
+        finite[name] = good
+    calendar = out[:, :, C.CP_CALENDAR_TYPE] == 1
+    for name, good in finite.items():
+        cd = _CALENDAR_CD_SLOT.get(name)
+        if cd is None:
+            continue
+        copy = good & calendar
+        out[:, :, cd][copy] = out[:, :, CROP_PARAM_INDEX[name]][copy]
+    return out
 
 
 def soil_params(soil, zmax: float | None = None

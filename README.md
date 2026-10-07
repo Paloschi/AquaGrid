@@ -140,6 +140,7 @@ sowing: data/sowing.zarr        # grid (y, x) int32 YYYYDDD; <=0 = masked
 output: data/output.zarr
 crop:
   name: Maize                   # any AquaCrop-OSPy crop
+  # zarr: data/crop.zarr        # optional (param, y, x) overrides per pixel
 soil:
   name: SandyLoam               # AquaCrop preset (xor with zarr below)
   # zarr: data/soil.zarr        # ksat/wcsat/wcpf2/wcpf3 or sand/silt/clay

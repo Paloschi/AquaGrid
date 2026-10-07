@@ -13,6 +13,7 @@ from aquagrid.io.schema import open_climate, open_sowing, sowing_to_plant_idx
 from aquagrid.io.soil import SoilGrid, open_soil, validate_soil_grid
 from aquagrid.kernels import constants as C
 from aquagrid.params import (
+    apply_crop_cube,
     co2_concentration_for_year,
     crop_params_array,
     initial_water_content,
@@ -70,6 +71,25 @@ def _output_templates(time, y, x, save_daily):
     return final, daily
 
 
+def _open_crop_cube(store: str | Path) -> xr.DataArray:
+    """Open a crop-parameter cube. The data variable is ``crop``, or the
+    only array with dims ``(param, y, x)``."""
+    ds = xr.open_zarr(store)
+    if "crop" in ds.data_vars:
+        da = ds["crop"]
+    else:
+        found = [name for name, var in ds.data_vars.items()
+                 if set(var.dims) == {"param", "y", "x"}]
+        if len(found) != 1:
+            raise ValueError(
+                "crop store needs a variable 'crop' with dims (param, y, x)")
+        da = ds[found[0]]
+    if set(da.dims) != {"param", "y", "x"}:
+        raise ValueError(
+            f"crop cube dims must be (param, y, x), got {da.dims}")
+    return da.transpose("param", "y", "x")
+
+
 def run_grid(
     climate: str | Path,
     sowing: str | Path,
@@ -78,6 +98,7 @@ def run_grid(
     soil_name: str | None = None,
     *,
     soil_zarr: str | Path | None = None,
+    crop_zarr: str | Path | None = None,
     ksat_unit: str = "cm/d",
     scale_factors: dict[str, float] | None = None,
     sowing_var: str = "sowing",
@@ -131,17 +152,27 @@ def run_grid(
     crop = Crop(crop_name, planting_date=nominal.strftime("%m/%d"))
     co2 = co2_concentration_for_year(year)
     cp = crop_params_array(crop, co2_conc=co2)
+    if crop_zarr is not None:
+        cube = _open_crop_cube(crop_zarr)
+        if cube.sizes["y"] != ds.sizes["y"] or cube.sizes["x"] != ds.sizes["x"]:
+            raise ValueError(
+                f"crop cube {(cube.sizes['y'], cube.sizes['x'])} does not "
+                f"match climate grid ({ds.sizes['y']}, {ds.sizes['x']})")
+        cp = apply_crop_cube(cp, cube)
+        zmax = float(np.nanmax(cp[:, :, C.CP_ZMAX]))
+    else:
+        zmax = float(crop.Zmax)
 
     if soil_grid is None:
         soil = Soil(soil_name)
-        sp, prof = soil_params(soil, zmax=crop.Zmax)
+        sp, prof = soil_params(soil, zmax=zmax)
         thini = initial_water_content(soil, initial_wc)
         soil_ctx = {"mode": "named", "sp": sp, "prof": prof, "thini": thini}
     else:
         soil_ctx = {
             "mode": "zarr",
             "grid": soil_grid,
-            "zmax": crop.Zmax,
+            "zmax": zmax,
             "initial_wc": initial_wc,
         }
 
@@ -177,6 +208,8 @@ def _run_tile(ds, plant_idx, cp, soil_ctx, time,
         for name in ("tmin", "tmax", "precip", "eto")
     }
     pidx = plant_idx[y0:y1, x0:x1].reshape(npix)
+    if cp.ndim == 3:
+        cp = cp[y0:y1, x0:x1].reshape(npix, cp.shape[-1])
 
     if soil_ctx["mode"] == "named":
         sp, prof, thini = soil_ctx["sp"], soil_ctx["prof"], soil_ctx["thini"]
@@ -238,6 +271,7 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
         crop_name=cfg["crop"]["name"],
         soil_name=soil_cfg.get("name"),
         soil_zarr=soil_cfg.get("zarr"),
+        crop_zarr=(cfg.get("crop") or {}).get("zarr"),
         ksat_unit=soil_cfg.get("ksat_unit", "cm/d"),
         scale_factors=scale,
         sowing_var=cfg.get("sowing_var", "sowing"),
