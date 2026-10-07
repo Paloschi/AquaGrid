@@ -1,9 +1,10 @@
-"""The published config guide lists every key run_from_config reads."""
+"""Published surfaces stay aligned with the code a release ships."""
 
 from __future__ import annotations
 
 import ast
 import re
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -132,3 +133,86 @@ def test_schema_documents_status_codes():
     assert "time" in rows["1"]
     assert "365" in rows["2"] and "CalendarType" in rows["2"]
     assert "ended before" in rows["3"] and "max_season_days" in rows["3"]
+
+
+def _project() -> dict:
+    return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+
+
+def _fallback_version() -> str:
+    """The string used when the package is not installed."""
+    src = (ROOT / "src" / "aquagrid" / "__init__.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if (
+            isinstance(target, ast.Name)
+            and target.id == "__version__"
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            found.append(node.value.value)
+    assert len(found) == 1
+    return found[0]
+
+
+def _bibtex_version() -> str:
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    match = re.search(
+        r"@software\{paloschi_aquagrid,.*?version\s*=\s*\{([^}]+)\}",
+        text,
+        flags=re.DOTALL,
+    )
+    assert match, "README citation has no version"
+    return match.group(1).strip()
+
+
+def _changelog_section(version: str) -> str:
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    match = re.search(
+        rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
+        text,
+        flags=re.M | re.S,
+    )
+    assert match and match.group(1).strip(), f"CHANGELOG.md has no notes for {version}"
+    return match.group(0).strip()
+
+
+def test_version_copies_match():
+    """pyproject.toml, the import fallback, and the README citation are one version."""
+    version = _project()["version"]
+    assert _fallback_version() == version
+    assert _bibtex_version() == version
+    assert _changelog_section(version)
+
+
+def _next_minor(version: str) -> str:
+    major, minor = version.split(".")[:2]
+    return f"{major}.{int(minor) + 1}"
+
+
+def test_requires_python_is_the_ci_matrix():
+    """The wheel claims the interpreters the release workflow just ran."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+    )
+    versions = workflow["jobs"]["test"]["strategy"]["matrix"]["python-version"]
+    ordered = sorted(versions, key=lambda item: tuple(int(part) for part in item.split(".")))
+    ceiling = _next_minor(ordered[-1])
+    assert _project()["requires-python"] == f">={ordered[0]},<{ceiling}"
+
+
+def test_github_release_follows_pypi_and_changelog():
+    """A rejected PyPI upload does not publish, and the body is the changelog section."""
+    path = ROOT / ".github" / "workflows" / "release.yml"
+    text = path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(text)
+    jobs = workflow["jobs"]
+    assert jobs["publish-to-pypi"]["needs"] == "build"
+    assert jobs["github-release"]["needs"] == "publish-to-pypi"
+    assert "--generate-notes" not in text
+    assert "--notes-file release-notes.md" in text
+    assert "CHANGELOG.md has no notes" in text

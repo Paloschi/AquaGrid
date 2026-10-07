@@ -5,7 +5,7 @@
 <p>
 <a href="https://pypi.org/project/aquagrid/"><img alt="PyPI" src="https://img.shields.io/pypi/v/aquagrid.svg?style=flat-square&color=0F766E"></a>
 <a href="https://github.com/Paloschi/aquagrid/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/Paloschi/aquagrid/actions/workflows/test.yml/badge.svg?branch=main"></a>
-<img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white">
+<img alt="Python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=flat-square&logo=python&logoColor=white">
 <a href="#license-and-attribution"><img alt="License" src="https://img.shields.io/badge/license-MIT-0F766E?style=flat-square"></a>
 <img alt="Visitors" src="https://api.visitorbadge.io/api/visitors?path=github.com%2FPaloschi%2Faquagrid&label=Visitors&countColor=%230F766E&style=flat">
 </p>
@@ -52,7 +52,7 @@ started in [CyMP](https://github.com/Paloschi/CyMP) (Unioeste-LEA).
 
 | Layer      | Stack                                                                      |
 | ---------- | -------------------------------------------------------------------------- |
-| Language   | **Python 3.11+**                                                           |
+| Language   | **Python 3.11 and 3.12**                                                   |
 | Kernels    | **Numba** (`njit` + `prange` / `numba.cuda`)                               |
 | Arrays     | **NumPy**, **xarray**, **zarr**, **Dask**                                  |
 | Reference  | **AquaCrop-OSPy** ≥ 3.0.11 (crop/soil params + parity tests)               |
@@ -67,7 +67,7 @@ pixel. Soil: a single AquaCrop preset **or** a per-pixel zarr raster
 
 ## Prerequisites
 
-- **Python 3.11+**
+- **Python 3.11 or 3.12**
 - GPU (optional): NVIDIA GPU with a CUDA **driver** — Numba talks to the
   driver; the full CUDA toolkit is not required
 
@@ -301,7 +301,7 @@ If you use AquaGrid in research or operational work, please cite this repository
   title   = {AquaGrid: pixel-wise AquaCrop on rasters (Numba CPU/GPU)},
   year    = {2026},
   url     = {https://github.com/Paloschi/aquagrid},
-  version = {0.3.0}
+  version = {0.3.1}
 }
 ```
 

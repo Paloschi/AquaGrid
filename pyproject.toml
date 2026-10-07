@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aquagrid"
-version = "0.3.0"
+version = "0.3.1"
 description = "AquaCrop on rasters: zarr in/out, Numba-compiled kernels (CPU/GPU)"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Rennan Andres Paloschi" }]
@@ -20,9 +20,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
 ]
-# Lower bounds are install floors, not a tested matrix. CI (Ubuntu and
-# Windows, Python 3.11 / 3.12) installs the newest versions that satisfy
-# these specifiers.
+# Floors are install minimums, not a tested matrix. CI (Ubuntu and
+# Windows, Python 3.11 and 3.12) installs the newest versions that
+# satisfy these specifiers. requires-python is that same pair, with a
+# ceiling, so the wheel does not claim an interpreter the suite never ran.
 dependencies = [
     "numpy>=1.26",
     "numba>=0.59",
