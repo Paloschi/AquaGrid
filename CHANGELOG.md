@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Optional crop-parameter zarr `(param, y, x)` so each pixel can override AquaCrop crop attributes.
 
+### Changed
+
+- Require xarray 2026.9 and zarr 3. xarray 2026.9 dropped the zarr 2 compatibility layer.
+
 ## [0.2.0] - 2026-09-22
 
 ### Changed
