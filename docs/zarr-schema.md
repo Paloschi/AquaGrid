@@ -27,7 +27,9 @@ Store with dims `(time, y, x)` and variables:
 legacy CyMP `YYYYDDD` convention (e.g. `2019135` = DOY 135 of 2019). Values
 `<= 0` mark pixels that are not simulated (nodata/mask).
 
-May live in the same store as climate or in its own store (var `sowing`).
+May live in the same store as climate or in its own store. The variable
+name defaults to `sowing` (`sowing_var` in the YAML config). A date that
+falls outside the climate `time` axis is not simulated.
 
 ## Soil (input)
 
@@ -58,8 +60,15 @@ Coord `depth` with canonical labels `0-5`, `5-15`, `15-30`, `30-60`,
 Each band becomes one compartment (`dz` = 5, 10, 15, 30, 40 cm). Integer
 HiHydroSoil v2 GeoTIFF: × `0.0001` (WC) and × `0.001` (Ksat, already includes
 cm/d → mm/d). Float WC in [0, 1] does not re-apply `0.0001`; Ksat still
-converts cm/d → mm/d if `soil.ksat_unit` is `cm/d` (default). Override:
-`soil.scale_factors`.
+converts cm/d → mm/d if `soil.ksat_unit` is `cm/d` (default; `mm/d`
+leaves float Ksat unchanged).
+
+`soil.scale_factors` maps a hydraulic name to a multiplier: `ksat`,
+`wcsat`, `wcpf2`, `wcpf3`. YAML keys are lowercased. A name listed there
+replaces the integer scale and the `ksat_unit` conversion for that
+variable. The map is applied only in this hydraulic branch. An AquaCrop
+preset (`soil.name`) and a texture raster ignore `soil.scale_factors`
+and `soil.ksat_unit`.
 
 2-D grids (no `depth`) are a homogeneous 12 × 0.1 m profile.
 
@@ -97,13 +106,22 @@ to the deepest finite `Zmax` in the cube.
 
 ## Outputs
 
-Zarr store with:
+Rainfed, one season per pixel, no irrigation and no groundwater table.
 
-- finals `(y, x)`, `float32`: `dry_yield`, `fresh_yield`, `yield_pot`
-  (tonne/ha), `biomass`, `biomass_ns` (g/m²), `hi_adj` (-), `dap_end`
-  (days), `status` (int8: 0=ok, 1=not simulated, 2=no maturity,
-  3=truncated).
-- optional daily `(time, y, x)`, `float32`, in group `daily` of the same
-  store: `canopy_cover` (-), `biomass` (g/m²), `z_root` (m), `gdd_cum`
-  (°C day), `es` (mm), `tr` (mm), `wr` (mm). Days outside the pixel's season
-  are `NaN`.
+Final fields are `(y, x)`: `dry_yield`, `fresh_yield`, `yield_pot`
+(float32, tonne/ha), `biomass`, `biomass_ns` (float32, g/m²), `hi_adj`
+(float32, -), `dap_end` (int16, days after planting), `status` (int8).
+
+`status`:
+
+| code | meaning |
+|------|---------|
+| 0 | Season closed: the crop reached maturity, the canopy died, or days after planting reached `max_season_days`. |
+| 1 | Not simulated: sowing is `<= 0`, the sowing date falls outside the climate `time` axis, or the soil pixel is NaN. Other final fields stay 0. |
+| 2 | GDD calendar was not built (`CalendarType` 2). Growing degree-days never rise strictly above maturity, or that crossing falls on day 365 or later of the season. A calendar-day crop (`CalendarType` 1) keeps the calendar prepared in Python. Other final fields stay 0. |
+| 3 | The climate series ended before maturity, canopy death, or the `max_season_days` cap. Final fields hold the season accumulated through the last climate day. |
+
+Optional daily fields are `(time, y, x)`, float32, in group `daily` of
+the same store: `canopy_cover` (-), `biomass` (g/m²), `z_root` (m),
+`gdd_cum` (°C day), `es` (mm), `tr` (mm), `wr` (mm). A day outside that
+pixel's season is `NaN`. A pixel with status 1 or 2 is `NaN` on every day.

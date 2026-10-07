@@ -106,9 +106,10 @@ aquagrid run --config ./data/config.yaml            # CPU
 aquagrid run --config ./data/config.yaml -b gpu     # GPU
 ```
 
-Output: `output.zarr` with final yield/biomass `(y, x)` and, with
-`save_daily: true`, daily series `(time, y, x)` in group `daily`.
-Full schema: [`docs/zarr-schema.md`](docs/zarr-schema.md).
+Output: `output.zarr` with final yield, biomass and `status` `(y, x)`
+and, with `save_daily: true`, daily series `(time, y, x)` in group
+`daily` (`NaN` outside that pixel's season). Full schema, including
+status codes: [`docs/zarr-schema.md`](docs/zarr-schema.md).
 
 ### Programmatic
 
@@ -135,24 +136,40 @@ run_grid("climate.zarr", "sowing.zarr", "output.zarr",
 ## YAML config
 
 ```yaml
-climate: data/climate.zarr      # cube (time, y, x): tmin, tmax, precip, eto
-sowing: data/sowing.zarr        # grid (y, x) int32 YYYYDDD; <=0 = masked
+climate: data/climate.zarr       # (time, y, x): tmin, tmax, precip, eto
+sowing: data/sowing.zarr         # (y, x) int32 YYYYDDD; <=0 = not simulated
+sowing_var: sowing               # variable name in the sowing store
+initial_water_content: FC       # FC | WP | SAT, either soil mode
 output: data/output.zarr
+
 crop:
-  name: Maize                   # any AquaCrop-OSPy crop
-  # zarr: data/crop.zarr        # optional (param, y, x) overrides per pixel
+  name: Maize                    # any AquaCrop-OSPy crop
+  zarr: null                     # optional (param, y, x) cube; null skips it
 soil:
-  name: SandyLoam               # AquaCrop preset (xor with zarr below)
-  # zarr: data/soil.zarr        # ksat/wcsat/wcpf2/wcpf3 or sand/silt/clay
-  # ksat_unit: cm/d
-backend: cpu                    # cpu | gpu
+  name: SandyLoam                # preset; remove when zarr is a path
+  zarr: null                     # hydraulic or texture raster; null uses name
+  ksat_unit: cm/d                # float hydraulic Ksat: cm/d or mm/d
+  scale_factors: {}              # hydraulic only, e.g. {ksat: 10}; else ignored
+
+backend: cpu                     # cpu | gpu
 options:
   save_daily: false
-  tile: 128                     # spatial tile size (pixels)
-  max_season_days: 400
+  tile: 128                      # pixels on each side of a tile
+  parallel: true                 # CPU thread per pixel; GPU ignores this
+  evap_time_steps: 20            # soil-evaporation substeps per day
+  max_season_days: 400           # cap; reaching it records status 0
 ```
 
-Copy from [`examples/config.example.yaml`](examples/config.example.yaml).
+That block is the full set of keys `run_from_config` reads. Copy it from
+[`examples/config.example.yaml`](examples/config.example.yaml).
+
+`initial_water_content` accepts `FC`, `WP`, or `SAT` for a preset and for
+a soil raster. Provide exactly one of `soil.name` and `soil.zarr`.
+`soil.scale_factors` and `soil.ksat_unit` apply only when `soil.zarr` is
+a hydraulic raster (`ksat`, `wcsat`, `wcpf2`, `wcpf3`); a preset or a
+texture raster ignores them. `options.parallel` is the CPU
+thread-per-pixel switch; the GPU backend ignores it. Status codes:
+[`docs/zarr-schema.md`](docs/zarr-schema.md).
 
 ---
 

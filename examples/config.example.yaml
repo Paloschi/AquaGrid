@@ -1,19 +1,23 @@
-# AquaGrid example config (see README.md)
-climate: data/climate.zarr
-sowing: data/sowing.zarr
+# AquaGrid example config (see README.md). Every key run_from_config reads.
+climate: data/climate.zarr       # (time, y, x): tmin, tmax, precip, eto
+sowing: data/sowing.zarr         # (y, x) int32 YYYYDDD; <=0 = not simulated
+sowing_var: sowing               # variable name in the sowing store
+initial_water_content: FC       # FC | WP | SAT, either soil mode
 output: data/output.zarr
 
 crop:
-  name: Maize
-  # zarr: data/crop.zarr   # optional (param, y, x) overrides per pixel
+  name: Maize                    # any AquaCrop-OSPy crop
+  zarr: null                     # optional (param, y, x) cube; null skips it
 soil:
-  name: SandyLoam          # AquaCrop preset (one profile for the grid)
-  # zarr: data/soil.zarr   # alternative: hydraulic or texture raster
-  # ksat_unit: cm/d        # default in zarr mode (HiHydroSoil)
+  name: SandyLoam                # preset; remove when zarr is a path
+  zarr: null                     # hydraulic or texture raster; null uses name
+  ksat_unit: cm/d                # float hydraulic Ksat: cm/d or mm/d
+  scale_factors: {}              # hydraulic only, e.g. {ksat: 10}; else ignored
 
-backend: cpu          # cpu | gpu
+backend: cpu                     # cpu | gpu
 options:
   save_daily: false
-  tile: 128
-  parallel: true
-  max_season_days: 400
+  tile: 128                      # pixels on each side of a tile
+  parallel: true                 # CPU thread per pixel; GPU ignores this
+  evap_time_steps: 20            # soil-evaporation substeps per day
+  max_season_days: 400           # cap; reaching it records status 0
