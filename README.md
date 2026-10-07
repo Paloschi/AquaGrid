@@ -12,8 +12,8 @@
 <p>
 <img alt="Numba" src="https://img.shields.io/badge/Numba-CPU%20%7C%20CUDA-00A3E0?style=flat-square">
 <img alt="NumPy" src="https://img.shields.io/badge/NumPy-1.26%2B-013243?style=flat-square&logo=numpy&logoColor=white">
-<img alt="xarray" src="https://img.shields.io/badge/xarray-2024%2B-4D8BBD?style=flat-square">
-<img alt="zarr" src="https://img.shields.io/badge/zarr-2.16%2B-F9C642?style=flat-square&labelColor=1A1A1A">
+<img alt="xarray" src="https://img.shields.io/badge/xarray-2026.9%2B-4D8BBD?style=flat-square">
+<img alt="zarr" src="https://img.shields.io/badge/zarr-3%2B-F9C642?style=flat-square&labelColor=1A1A1A">
 <img alt="Dask" src="https://img.shields.io/badge/Dask-2024%2B-FFC107?style=flat-square&logo=dask&logoColor=black">
 <img alt="pytest" src="https://img.shields.io/badge/pytest-8-0A9EDC?style=flat-square&logo=pytest&logoColor=white">
 <img alt="AquaCrop-OSPy" src="https://img.shields.io/badge/AquaCrop--OSPy-3.x-0F766E?style=flat-square">
