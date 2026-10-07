@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pytest-cov>=5"]
 
 [project.urls]
 Homepage = "https://github.com/Paloschi/aquagrid"
@@ -53,3 +53,22 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+# Line coverage gates pipeline, io, params, soil_grid and engine.
+# The kernels package stays out of that percentage: impl.py is proved
+# by the AquaCrop-OSPy parity tests, not by a line count.
+[tool.coverage.run]
+source = ["aquagrid"]
+omit = [
+    "*/kernels/*",
+    "*/cli.py",
+    "*/bench.py",
+    "*/aquagrid/__init__.py",
+]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.coverage.xml]
+output = "coverage.xml"

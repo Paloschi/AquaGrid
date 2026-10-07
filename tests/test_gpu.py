@@ -1,4 +1,11 @@
-"""CPU vs GPU parity (skipped when no CUDA device is available)."""
+"""CPU vs GPU parity.
+
+Skipped unless a CUDA device is available, or ``NUMBA_ENABLE_CUDASIM=1``
+is set before Numba is imported. The simulator compiles the same CUDA
+kernel and runs it on the CPU. CI sets that variable so this test is part
+of the hosted matrix; a runner with a GPU should leave it unset and
+execute the same test on the device.
+"""
 
 from __future__ import annotations
 
@@ -17,8 +24,10 @@ try:
 except Exception:  # pragma: no cover
     pass
 
-pytestmark = pytest.mark.skipif(not cuda_available,
-                                reason="no CUDA GPU available")
+pytestmark = pytest.mark.skipif(
+    not cuda_available,
+    reason="no CUDA GPU available (set NUMBA_ENABLE_CUDASIM=1 to simulate)",
+)
 
 
 @pytest.fixture(scope="module")

@@ -250,15 +250,19 @@ pytest            # parity vs AquaCrop-OSPy, io, grid driver, gpu (if present)
 
 | File | What it covers |
 | ---- | -------------- |
-| `test_parity.py` | Single pixel vs AquaCrop-OSPy, 1e-12 (maize/soybean, calendar and GDD, 3 soils) |
-| `test_grid.py` | Mask, per-pixel sowing, tiles, grid vs single-pixel equality |
-| `test_soil.py` | Hydraulic/texture zarr, Saxton–Rawls PTF, per-pixel soil |
-| `test_io.py` | Synthetic I/O, sowing → plant index |
-| `test_gpu.py` | CPU vs GPU parity (skipped without CUDA) |
+| `test_parity.py` | Single pixel vs AquaCrop-OSPy, 1e-12, every published final and daily field |
+| `test_grid.py` | Mask, tiles, prange vs single pixel (bit-exact), crop cube vs OSPy, YAML config |
+| `test_soil.py` | Hydraulic/texture zarr, Saxton–Rawls profile vs AquaCrop-OSPy |
+| `test_io.py` | Synthetic I/O and schema rejections (gaps, missing variables, shape) |
+| `test_gpu.py` | CPU vs GPU parity (device, or the CUDA simulator when `NUMBA_ENABLE_CUDASIM=1`) |
 
 CI (GitHub Actions) runs on every **pull request** against `main`, and again
 on push to `main`: Ubuntu and Windows × Python 3.11 / 3.12. Hosted runners
-are CPU-only; `test_gpu.py` is skipped.
+set `NUMBA_ENABLE_CUDASIM=1`, so `test_gpu.py` compiles the CUDA kernel in
+the simulator instead of being skipped. A runner with a GPU should leave
+that variable unset and run the same test on the device. Coverage of
+`pipeline`, `io`, `params`, `soil_grid` and `engine` fails the job below
+90% (`kernels/impl.py` stays outside that percentage; parity covers it).
 
 ---
 
