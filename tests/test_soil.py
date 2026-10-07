@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from aquacrop import Crop, Soil
+from aquacrop import Crop, InitialWaterContent, Soil
 
 from aquagrid.engine.run import run_grid_arrays
 from aquagrid.io.soil import (
@@ -31,10 +31,14 @@ from aquagrid.params import (
 )
 from aquagrid.pipeline import run_grid
 from aquagrid.soil_grid import (
+    DEFAULT_HOMOGENEOUS_DZ,
+    DEPTH_THICKNESS_M,
     curve_number_from_ksat,
+    deepen_dz,
     profiles_from_store,
     saxton_rawls,
 )
+from test_parity import assert_ospy_parity, run_reference
 
 
 HYDRO_KEYS = (
@@ -222,6 +226,86 @@ def test_broadcast_2d_matches_1d(weather_df):
         cp=cp, sp=sp2, profile=prof2, th_init=th2, parallel=False,
     )
     np.testing.assert_allclose(fin_1d, fin_2d, rtol=0, atol=0)
+
+
+def _ospy_soil_matching_texture(grid, zmax: float):
+    """AquaCrop ``Soil`` with the same Saxton–Rawls layers and compartment dz."""
+    if grid.depths:
+        dz_src = np.array(
+            [DEPTH_THICKNESS_M[d] for d in grid.depths], np.float64)
+        thicknesses = [float(DEPTH_THICKNESS_M[d]) for d in grid.depths]
+    else:
+        dz_src = DEFAULT_HOMOGENEOUS_DZ.copy()
+        thicknesses = None
+    dz = deepen_dz(dz_src, zmax)
+    soil = Soil(
+        "custom", dz=[float(v) for v in dz], adj_rew=0, calc_cn=1,
+    )
+    sand = np.asarray(grid.ds["sand"].values, np.float64)
+    clay = np.asarray(grid.ds["clay"].values, np.float64)
+    if "orgmat" in grid.ds:
+        orgmat = np.asarray(grid.ds["orgmat"].values, np.float64)
+    else:
+        orgmat = np.zeros_like(sand)
+
+    def cell(arr, index=None):
+        if index is None:
+            return float(np.reshape(arr, -1)[0])
+        return float(np.reshape(arr[index], -1)[0])
+
+    if thicknesses is None:
+        soil.add_layer_from_texture(
+            float(np.sum(dz)), cell(sand), cell(clay), cell(orgmat), 100)
+    else:
+        for i, thickness in enumerate(thicknesses):
+            soil.add_layer_from_texture(
+                thickness, cell(sand, i), cell(clay, i), cell(orgmat, i), 100)
+    return soil
+
+
+def test_texture_soil_matches_ospy(tmp_path, weather_df):
+    """Layered texture, converted with Saxton–Rawls, matches AquaCrop-OSPy."""
+    ds = synthetic_soil_texture(1, 1)
+    sands = np.array([75, 55, 35, 20, 10], np.float32).reshape(5, 1, 1)
+    clays = np.array([8, 18, 30, 40, 45], np.float32).reshape(5, 1, 1)
+    ds["sand"] = (("depth", "y", "x"), sands)
+    ds["clay"] = (("depth", "y", "x"), clays)
+    ds["silt"] = (("depth", "y", "x"), (100 - sands - clays).astype(np.float32))
+    ds["orgmat"] = (("depth", "y", "x"), np.full((5, 1, 1), 1.5, np.float32))
+    _write(ds, tmp_path / "tex.zarr")
+    grid = open_soil(tmp_path / "tex.zarr")
+
+    planting = "2019/05/15"
+    start = pd.Timestamp(planting)
+    plant_idx = int((weather_df.Date == start).idxmax())
+    sub = weather_df.iloc[plant_idx:].reset_index(drop=True)
+    crop = Crop("Maize", planting_date="05/15")
+    cp = crop_params_array(crop, co2_conc=co2_concentration_for_year(2019))
+    sp, prof, thini, valid = profiles_from_store(grid, zmax=float(crop.Zmax))
+    assert bool(valid[0])
+
+    fin, daily = run_grid_arrays(
+        tmin=sub.MinTemp.to_numpy()[:, None],
+        tmax=sub.MaxTemp.to_numpy()[:, None],
+        prcp=sub.Precipitation.to_numpy()[:, None],
+        et0=sub.ReferenceET.to_numpy()[:, None],
+        plant_idx=np.array([0], np.int64),
+        cp=cp, sp=sp, profile=prof, th_init=thini,
+        save_daily=True, parallel=False,
+    )
+    soil = _ospy_soil_matching_texture(grid, float(crop.Zmax))
+    n_layer = int(soil.nLayer)
+    # Preset soils are one layer, so OSPy's default FC applies to the whole
+    # profile. Each texture band is its own layer and must start at FC too.
+    initial_wc = InitialWaterContent(
+        method="Layer",
+        depth_layer=list(range(1, n_layer + 1)),
+        value=["FC"] * n_layer,
+    )
+    model = run_reference(
+        sub, "Maize", "custom", planting, soil=soil, initial_wc=initial_wc,
+    )
+    assert_ospy_parity(model, fin, daily)
 
 
 def test_texture_profiles_finite(tmp_path):

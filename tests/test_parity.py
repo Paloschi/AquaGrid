@@ -19,21 +19,69 @@ from aquagrid.params import (
 
 
 def run_reference(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
-                  planting: str):
-    """Run original aquacrop from planting date to end of weather."""
+                  planting: str, *, crop=None, soil=None, initial_wc=None):
+    """Run original aquacrop from planting date to end of weather.
+
+    ``crop`` / ``soil`` override the named presets so a raster profile or a
+    cube-adjusted parameter can be checked against the same model.
+    ``initial_wc`` defaults to field capacity on layer 1, which covers a
+    preset soil (one layer). A multi-layer soil must list every layer.
+    """
     start = pd.Timestamp(planting)
     end = weather_df.Date.iloc[-1]
-    crop = Crop(crop_name, planting_date=start.strftime("%m/%d"))
+    if crop is None:
+        crop = Crop(crop_name, planting_date=start.strftime("%m/%d"))
+    if soil is None:
+        soil = Soil(soil_name)
+    if initial_wc is None:
+        initial_wc = InitialWaterContent(value=["FC"])
     model = AquaCropModel(
         sim_start_time=start.strftime("%Y/%m/%d"),
         sim_end_time=end.strftime("%Y/%m/%d"),
         weather_df=weather_df,
-        soil=Soil(soil_name),
+        soil=soil,
         crop=crop,
-        initial_water_content=InitialWaterContent(value=["FC"]),
+        initial_water_content=initial_wc,
     )
     model.run_model(till_termination=True)
     return model
+
+
+def assert_ospy_parity(model, fin, daily, pixel: int = 0) -> None:
+    """Every published final and daily field matches AquaCrop-OSPy at 1e-12."""
+    assert fin[pixel, C.OF_STATUS] == C.STATUS_OK
+
+    growth = model._outputs.crop_growth
+    flux = model._outputs.water_flux
+    n_days = int(fin[pixel, C.OF_DAY_END]) + 1
+    last = n_days - 1
+
+    daily_pairs = (
+        (C.OD_GDD_CUM, growth["gdd_cum"].to_numpy()[:n_days], 1e-10),
+        (C.OD_Z_ROOT, growth["z_root"].to_numpy()[:n_days], 1e-12),
+        (C.OD_CANOPY_COVER, growth["canopy_cover"].to_numpy()[:n_days], 1e-12),
+        (C.OD_BIOMASS, growth["biomass"].to_numpy()[:n_days], 1e-10),
+        (C.OD_ES, flux["Es"].to_numpy()[:n_days], 1e-12),
+        (C.OD_TR, flux["Tr"].to_numpy()[:n_days], 1e-12),
+        (C.OD_WR, flux["Wr"].to_numpy()[:n_days], 1e-12),
+    )
+    for od, ref, atol in daily_pairs:
+        np.testing.assert_allclose(
+            daily[od, :n_days, pixel], ref, rtol=1e-12, atol=atol)
+
+    stats = model._outputs.final_stats
+    finals = (
+        (C.OF_DRY_YIELD, float(stats["Dry yield (tonne/ha)"].iloc[0]), 1e-12),
+        (C.OF_FRESH_YIELD, float(stats["Fresh yield (tonne/ha)"].iloc[0]), 1e-12),
+        (C.OF_YIELD_POT, float(stats["Yield potential (tonne/ha)"].iloc[0]), 1e-12),
+        (C.OF_BIOMASS, float(growth["biomass"].iloc[last]), 1e-10),
+        (C.OF_BIOMASS_NS, float(growth["biomass_ns"].iloc[last]), 1e-10),
+        (C.OF_HI_ADJ, float(growth["harvest_index_adj"].iloc[last]), 1e-12),
+    )
+    for of, ref, atol in finals:
+        assert fin[pixel, of] == pytest.approx(ref, rel=1e-12, abs=atol)
+    # Season length in days after planting, published as dap_end.
+    assert int(fin[pixel, C.OF_DAP_END]) == int(growth["dap"].iloc[last])
 
 
 def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
@@ -77,29 +125,4 @@ def test_parity_vs_aquacrop(weather_df, crop_name, soil_name, planting):
     model = run_reference(weather_df, crop_name, soil_name, planting)
     fin, daily, nt = run_grid_kernel(weather_df, crop_name, soil_name, planting)
 
-    assert fin[0, C.OF_STATUS] == C.STATUS_OK
-
-    # --- daily series (reference rows are relative to sim start = planting)
-    growth = model._outputs.crop_growth
-    n_days = int(fin[0, C.OF_DAY_END]) + 1
-    ref_cc = growth["canopy_cover"].to_numpy()[:n_days]
-    ref_biomass = growth["biomass"].to_numpy()[:n_days]
-    ref_zroot = growth["z_root"].to_numpy()[:n_days]
-    ref_gddcum = growth["gdd_cum"].to_numpy()[:n_days]
-
-    got_cc = daily[C.OD_CANOPY_COVER, :n_days, 0]
-    got_biomass = daily[C.OD_BIOMASS, :n_days, 0]
-    got_zroot = daily[C.OD_Z_ROOT, :n_days, 0]
-    got_gddcum = daily[C.OD_GDD_CUM, :n_days, 0]
-
-    np.testing.assert_allclose(got_gddcum, ref_gddcum, rtol=1e-12, atol=1e-10)
-    np.testing.assert_allclose(got_zroot, ref_zroot, rtol=1e-12, atol=1e-12)
-    np.testing.assert_allclose(got_cc, ref_cc, rtol=1e-12, atol=1e-12)
-    np.testing.assert_allclose(got_biomass, ref_biomass, rtol=1e-12, atol=1e-10)
-
-    # --- final yield
-    stats = model._outputs.final_stats
-    ref_dry = float(stats["Dry yield (tonne/ha)"].iloc[0])
-    ref_fresh = float(stats["Fresh yield (tonne/ha)"].iloc[0])
-    assert fin[0, C.OF_DRY_YIELD] == pytest.approx(ref_dry, rel=1e-12)
-    assert fin[0, C.OF_FRESH_YIELD] == pytest.approx(ref_fresh, rel=1e-12)
+    assert_ospy_parity(model, fin, daily)

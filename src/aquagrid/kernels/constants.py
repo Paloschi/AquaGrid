@@ -190,7 +190,7 @@ OD_WR = _p()
 OD_N = next(_d)
 
 # ------------------------------------------------------------------ statuses
-STATUS_OK = 0.0
-STATUS_NOT_SIMULATED = 1.0    # masked pixel / no sowing date
-STATUS_NO_MATURITY_GDD = 2.0  # not enough GDDs in weather series to mature
-STATUS_TRUNCATED = 3.0        # weather series ended before maturity
+STATUS_OK = 0.0               # maturity, canopy death, or max_season_days
+STATUS_NOT_SIMULATED = 1.0    # sowing <= 0, outside the climate time axis, or soil NaN
+STATUS_NO_MATURITY_GDD = 2.0  # CalendarType 2: GDD never strictly above maturity, or day 365 or later
+STATUS_TRUNCATED = 3.0        # ended before maturity, canopy death, or max_season_days

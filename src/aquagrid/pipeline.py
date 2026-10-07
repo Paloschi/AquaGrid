@@ -112,12 +112,40 @@ def run_grid(
 ) -> Path:
     """Run AquaCrop over a grid, tile by tile, writing results to zarr.
 
-    ``climate``/``sowing`` are input zarr stores following the schema in
-    ``docs/zarr-schema.md``; ``output`` is the target store (final outputs
-    at the root group, daily outputs in group ``daily`` if ``save_daily``).
+    ``climate`` and ``sowing`` follow ``docs/zarr-schema.md``. ``output``
+    holds final fields at the root and, when ``save_daily`` is true, daily
+    fields in group ``daily``. A day outside a pixel's season is NaN.
 
-    Provide exactly one of ``soil_name`` (AquaCrop preset, one profile for
-    the grid) or ``soil_zarr`` (per-pixel hydraulic or texture raster).
+    Provide exactly one of ``soil_name`` (one AquaCrop preset for the
+    grid) or ``soil_zarr`` (per-pixel hydraulic or texture raster).
+    ``ksat_unit`` (``cm/d`` or ``mm/d``) converts float hydraulic Ksat.
+    ``scale_factors`` maps ``ksat``, ``wcsat``, ``wcpf2`` and ``wcpf3``
+    to multipliers and replaces that conversion for each name present.
+    Both apply only to a hydraulic raster; a preset or a texture raster
+    ignores them. Pass lowercase names here; ``run_from_config``
+    lowercases YAML keys.
+
+    ``crop_name`` selects the AquaCrop crop. ``crop_zarr``, when given,
+    is a ``(param, y, x)`` cube of per-pixel overrides. A missing layer
+    or a NaN cell keeps the named-crop value.
+
+    ``sowing_var`` is the variable in the sowing store (default
+    ``sowing``). ``initial_wc`` is ``FC``, ``WP`` or ``SAT`` on either
+    soil mode. Status 1: sowing is ``<= 0``, the sowing date falls
+    outside the climate ``time`` axis, or the soil pixel is NaN. Other
+    final fields stay 0.
+
+    ``backend`` is ``cpu`` or ``gpu``. ``tile`` is the tile edge in
+    pixels. ``parallel`` runs one CPU thread per pixel; the GPU backend
+    ignores it. ``evap_time_steps`` is the number of soil-evaporation
+    substeps per day. ``max_season_days`` caps days after planting.
+    Status 0: the crop reached maturity, the canopy died, or days after
+    planting reached ``max_season_days``. Status 2: ``CalendarType`` 2
+    and growing degree-days never rise strictly above maturity, or that
+    crossing falls on day 365 or later. A calendar-day crop
+    (``CalendarType`` 1) keeps the calendar prepared in Python. Other
+    final fields stay 0. Status 3: the climate series ended before
+    maturity, canopy death, or the ``max_season_days`` cap.
     """
     from aquacrop import Crop, Soil
 
@@ -255,7 +283,25 @@ def _run_tile(ds, plant_idx, cp, soil_ctx, time,
 
 
 def run_from_config(config: str | Path, backend: str | None = None) -> Path:
-    """Run a gridded simulation described by a YAML config file."""
+    """Run a gridded simulation described by a YAML config file.
+
+    ``backend``, when passed, overrides the file. Keys and defaults:
+
+    - ``climate``, ``sowing``, ``output`` — zarr paths
+    - ``sowing_var`` (``sowing``) — variable name in the sowing store
+    - ``initial_water_content`` (``FC``) — ``FC``, ``WP`` or ``SAT``
+    - ``crop.name`` — AquaCrop crop; ``crop.zarr`` — optional cube
+    - ``soil.name`` or ``soil.zarr`` — exactly one soil source
+    - ``soil.ksat_unit`` (``cm/d``) — float hydraulic Ksat unit
+    - ``soil.scale_factors`` — hydraulic multipliers; ignored otherwise
+    - ``backend`` (``cpu``) — ``cpu`` or ``gpu``
+    - ``options.save_daily`` (false), ``options.tile`` (128),
+      ``options.parallel`` (true), ``options.evap_time_steps`` (20),
+      ``options.max_season_days`` (400)
+
+    Parameter meanings match ``run_grid``. Field layout and status codes
+    are in ``docs/zarr-schema.md``.
+    """
     import yaml
 
     cfg = yaml.safe_load(Path(config).read_text(encoding="utf-8"))

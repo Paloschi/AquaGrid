@@ -179,7 +179,12 @@ def open_soil(
     ksat_unit: str = "cm/d",
     scale_factors: dict[str, float] | None = None,
 ) -> SoilGrid:
-    """Open and validate a soil zarr store; convert to AquaCrop units."""
+    """Open and validate a soil zarr store and convert it to AquaCrop units.
+
+    ``scale_factors`` multiplies hydraulic variables (``ksat``, ``wcsat``,
+    ``wcpf2``, ``wcpf3``). A listed name replaces the default integer scale
+    and the ``ksat_unit`` conversion. A texture store ignores both.
+    """
     ds = xr.open_zarr(store, decode_timedelta=False)
     hydro = {name: _lookup_var(ds, aliases) for name, aliases in HYDRO_ALIASES.items()}
     texture = {name: _lookup_var(ds, aliases) for name, aliases in TEXTURE_ALIASES.items()}

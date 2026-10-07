@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 from aquagrid.io import (
     generate_synthetic,
@@ -12,6 +13,7 @@ from aquagrid.io import (
     open_sowing,
     open_soil,
     sowing_to_plant_idx,
+    validate_climate,
 )
 
 
@@ -65,6 +67,82 @@ def test_sowing_outside_time_axis():
     assert idx[0, 1] == 0         # 2019-05-01
     assert idx[0, 2] == -1        # beyond 30 days
     assert (idx[1] == -1).all()
+
+
+def _climate(time, ny=2, nx=2, *, variables=None, coords=None):
+    n = len(time)
+    data = np.zeros((n, ny, nx), np.float32)
+    names = variables or ("tmin", "tmax", "precip", "eto")
+    fields = {
+        "tmin": data,
+        "tmax": data + 10,
+        "precip": np.abs(data),
+        "eto": data + 3,
+    }
+    if coords is None:
+        coords = {"time": time, "y": np.arange(ny), "x": np.arange(nx)}
+    return xr.Dataset(
+        {name: (("time", "y", "x"), fields[name]) for name in names},
+        coords=coords,
+    )
+
+
+def test_climate_rejects_time_gap(tmp_path):
+    time = pd.to_datetime(["2019-05-01", "2019-05-02", "2019-05-04"])
+    path = tmp_path / "climate.zarr"
+    _climate(time).to_zarr(path, mode="w")
+    with pytest.raises(ValueError, match="gap-free"):
+        open_climate(path)
+
+
+def test_climate_rejects_missing_variable(tmp_path):
+    time = pd.date_range("2019-05-01", periods=4, freq="D")
+    path = tmp_path / "climate.zarr"
+    _climate(time, variables=("tmin", "tmax", "precip")).to_zarr(path, mode="w")
+    with pytest.raises(ValueError, match="missing variable 'eto'"):
+        open_climate(path)
+
+
+def test_climate_rejects_variable_dims(tmp_path):
+    time = pd.date_range("2019-05-01", periods=4, freq="D")
+    ds = _climate(time)
+    ds["tmin"] = ds.tmin.transpose("y", "x", "time")
+    path = tmp_path / "climate.zarr"
+    ds.to_zarr(path, mode="w")
+    with pytest.raises(ValueError, match="has dims"):
+        open_climate(path)
+
+
+def test_climate_rejects_missing_time_coordinate():
+    time = pd.date_range("2019-05-01", periods=3, freq="D")
+    ds = _climate(
+        time,
+        ny=1,
+        nx=1,
+        coords={"y": [0], "x": [0]},
+    )
+    with pytest.raises(ValueError, match="missing 'time' coordinate"):
+        validate_climate(ds)
+
+
+def test_sowing_rejects_missing_variable(tmp_path):
+    path = tmp_path / "sowing.zarr"
+    xr.Dataset(
+        {"other": (("y", "x"), np.zeros((2, 2), np.int32))},
+        coords={"y": [0, 1], "x": [0, 1]},
+    ).to_zarr(path, mode="w")
+    with pytest.raises(ValueError, match="missing variable 'sowing'"):
+        open_sowing(path)
+
+
+def test_sowing_rejects_wrong_dims(tmp_path):
+    path = tmp_path / "sowing.zarr"
+    xr.Dataset(
+        {"sowing": (("x", "y"), np.zeros((2, 2), np.int32))},
+        coords={"y": [0, 1], "x": [0, 1]},
+    ).to_zarr(path, mode="w")
+    with pytest.raises(ValueError, match=r"\(y, x\)"):
+        open_sowing(path)
 
 
 def test_synthetic_soil_schema(synth_dir):

@@ -7,10 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-07
+
 ### Fixed
 
 - Read `__version__` from the installed package metadata. The 0.3.0 wheel still reported 0.2.0.
 - Point the license attribution and the README citation at the 0.3.0 tree.
+
+### Changed
+
+- Cap supported Python at 3.11 and 3.12 (`requires-python` is `>=3.11,<3.13`), the interpreters the release workflow runs.
+- Publish the GitHub Release from this section, after PyPI accepts the files.
+- Document every `run_from_config` key and the four output `status` codes.
+- Lock the status comment, the `run_grid` docstring, the release changelog pattern, and the README Python lines to the kernel and the CI matrix.
 
 ## [0.3.0] - 2026-10-07
 
@@ -42,7 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial AquaGrid package: zarr climate/sowing in, Numba CPU and GPU
   kernels, YAML CLI, and pytest suite with bit-exact AquaCrop-OSPy parity.
 
-[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Paloschi/aquagrid/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Paloschi/aquagrid/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Paloschi/aquagrid/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Paloschi/aquagrid/releases/tag/v0.1.1

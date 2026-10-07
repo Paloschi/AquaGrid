@@ -5,7 +5,7 @@
 <p>
 <a href="https://pypi.org/project/aquagrid/"><img alt="PyPI" src="https://img.shields.io/pypi/v/aquagrid.svg?style=flat-square&color=0F766E"></a>
 <a href="https://github.com/Paloschi/aquagrid/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/Paloschi/aquagrid/actions/workflows/test.yml/badge.svg?branch=main"></a>
-<img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white">
+<img alt="Python" src="https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=flat-square&logo=python&logoColor=white">
 <a href="#license-and-attribution"><img alt="License" src="https://img.shields.io/badge/license-MIT-0F766E?style=flat-square"></a>
 <img alt="Visitors" src="https://api.visitorbadge.io/api/visitors?path=github.com%2FPaloschi%2Faquagrid&label=Visitors&countColor=%230F766E&style=flat">
 </p>
@@ -52,7 +52,7 @@ started in [CyMP](https://github.com/Paloschi/CyMP) (Unioeste-LEA).
 
 | Layer      | Stack                                                                      |
 | ---------- | -------------------------------------------------------------------------- |
-| Language   | **Python 3.11+**                                                           |
+| Language   | **Python 3.11 and 3.12**                                                   |
 | Kernels    | **Numba** (`njit` + `prange` / `numba.cuda`)                               |
 | Arrays     | **NumPy**, **xarray**, **zarr**, **Dask**                                  |
 | Reference  | **AquaCrop-OSPy** ≥ 3.0.11 (crop/soil params + parity tests)               |
@@ -67,7 +67,7 @@ pixel. Soil: a single AquaCrop preset **or** a per-pixel zarr raster
 
 ## Prerequisites
 
-- **Python 3.11+**
+- **Python 3.11 or 3.12**
 - GPU (optional): NVIDIA GPU with a CUDA **driver** — Numba talks to the
   driver; the full CUDA toolkit is not required
 
@@ -106,9 +106,10 @@ aquagrid run --config ./data/config.yaml            # CPU
 aquagrid run --config ./data/config.yaml -b gpu     # GPU
 ```
 
-Output: `output.zarr` with final yield/biomass `(y, x)` and, with
-`save_daily: true`, daily series `(time, y, x)` in group `daily`.
-Full schema: [`docs/zarr-schema.md`](docs/zarr-schema.md).
+Output: `output.zarr` with final yield, biomass and `status` `(y, x)`
+and, with `save_daily: true`, daily series `(time, y, x)` in group
+`daily` (`NaN` outside that pixel's season). Full schema, including
+status codes: [`docs/zarr-schema.md`](docs/zarr-schema.md).
 
 ### Programmatic
 
@@ -135,24 +136,40 @@ run_grid("climate.zarr", "sowing.zarr", "output.zarr",
 ## YAML config
 
 ```yaml
-climate: data/climate.zarr      # cube (time, y, x): tmin, tmax, precip, eto
-sowing: data/sowing.zarr        # grid (y, x) int32 YYYYDDD; <=0 = masked
+climate: data/climate.zarr       # (time, y, x): tmin, tmax, precip, eto
+sowing: data/sowing.zarr         # (y, x) int32 YYYYDDD; <=0 = not simulated
+sowing_var: sowing               # variable name in the sowing store
+initial_water_content: FC       # FC | WP | SAT, either soil mode
 output: data/output.zarr
+
 crop:
-  name: Maize                   # any AquaCrop-OSPy crop
-  # zarr: data/crop.zarr        # optional (param, y, x) overrides per pixel
+  name: Maize                    # any AquaCrop-OSPy crop
+  zarr: null                     # optional (param, y, x) cube; null skips it
 soil:
-  name: SandyLoam               # AquaCrop preset (xor with zarr below)
-  # zarr: data/soil.zarr        # ksat/wcsat/wcpf2/wcpf3 or sand/silt/clay
-  # ksat_unit: cm/d
-backend: cpu                    # cpu | gpu
+  name: SandyLoam                # preset; remove when zarr is a path
+  zarr: null                     # hydraulic or texture raster; null uses name
+  ksat_unit: cm/d                # float hydraulic Ksat: cm/d or mm/d
+  scale_factors: {}              # hydraulic only, e.g. {ksat: 10}; else ignored
+
+backend: cpu                     # cpu | gpu
 options:
   save_daily: false
-  tile: 128                     # spatial tile size (pixels)
-  max_season_days: 400
+  tile: 128                      # pixels on each side of a tile
+  parallel: true                 # CPU thread per pixel; GPU ignores this
+  evap_time_steps: 20            # soil-evaporation substeps per day
+  max_season_days: 400           # cap; reaching it records status 0
 ```
 
-Copy from [`examples/config.example.yaml`](examples/config.example.yaml).
+That block is the full set of keys `run_from_config` reads. Copy it from
+[`examples/config.example.yaml`](examples/config.example.yaml).
+
+`initial_water_content` accepts `FC`, `WP`, or `SAT` for a preset and for
+a soil raster. Provide exactly one of `soil.name` and `soil.zarr`.
+`soil.scale_factors` and `soil.ksat_unit` apply only when `soil.zarr` is
+a hydraulic raster (`ksat`, `wcsat`, `wcpf2`, `wcpf3`); a preset or a
+texture raster ignores them. `options.parallel` is the CPU
+thread-per-pixel switch; the GPU backend ignores it. Status codes:
+[`docs/zarr-schema.md`](docs/zarr-schema.md).
 
 ---
 
@@ -250,15 +267,19 @@ pytest            # parity vs AquaCrop-OSPy, io, grid driver, gpu (if present)
 
 | File | What it covers |
 | ---- | -------------- |
-| `test_parity.py` | Single pixel vs AquaCrop-OSPy, 1e-12 (maize/soybean, calendar and GDD, 3 soils) |
-| `test_grid.py` | Mask, per-pixel sowing, tiles, grid vs single-pixel equality |
-| `test_soil.py` | Hydraulic/texture zarr, Saxton–Rawls PTF, per-pixel soil |
-| `test_io.py` | Synthetic I/O, sowing → plant index |
-| `test_gpu.py` | CPU vs GPU parity (skipped without CUDA) |
+| `test_parity.py` | Single pixel vs AquaCrop-OSPy, 1e-12, every published final and daily field |
+| `test_grid.py` | Mask, tiles, prange vs single pixel (bit-exact), crop cube vs OSPy, YAML config |
+| `test_soil.py` | Hydraulic/texture zarr, Saxton–Rawls profile vs AquaCrop-OSPy |
+| `test_io.py` | Synthetic I/O and schema rejections (gaps, missing variables, shape) |
+| `test_gpu.py` | CPU vs GPU parity (device, or the CUDA simulator when `NUMBA_ENABLE_CUDASIM=1`) |
 
 CI (GitHub Actions) runs on every **pull request** against `main`, and again
 on push to `main`: Ubuntu and Windows × Python 3.11 / 3.12. Hosted runners
-are CPU-only; `test_gpu.py` is skipped.
+set `NUMBA_ENABLE_CUDASIM=1`, so `test_gpu.py` compiles the CUDA kernel in
+the simulator instead of being skipped. A runner with a GPU should leave
+that variable unset and run the same test on the device. Coverage of
+`pipeline`, `io`, `params`, `soil_grid` and `engine` fails the job below
+90% (`kernels/impl.py` stays outside that percentage; parity covers it).
 
 ---
 
@@ -280,7 +301,7 @@ If you use AquaGrid in research or operational work, please cite this repository
   title   = {AquaGrid: pixel-wise AquaCrop on rasters (Numba CPU/GPU)},
   year    = {2026},
   url     = {https://github.com/Paloschi/aquagrid},
-  version = {0.3.0}
+  version = {0.3.1}
 }
 ```
 
