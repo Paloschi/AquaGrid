@@ -42,6 +42,8 @@
 
 ## Support
 
+If you find AquaGrid useful for your work, consider supporting its development through GitHub Sponsors:
+
 <p align="center">
 <a href="https://github.com/sponsors/Paloschi"><img alt="Sponsor" src="https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white"></a>
 </p>
