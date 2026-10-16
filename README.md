@@ -40,6 +40,14 @@
 
 ---
 
+## Support
+
+<p align="center">
+<a href="https://github.com/sponsors/Paloschi"><img alt="Sponsor" src="https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white"></a>
+</p>
+
+---
+
 Climate as zarr cubes `(time, y, x)`, per-pixel sowing dates `(y, x)`, zarr
 outputs. Daily-step kernels from
 [AquaCrop-OSPy](https://github.com/aquacropos/aquacrop) 3.x are vendored and
@@ -307,16 +315,6 @@ If you use AquaGrid in research or operational work, please cite this repository
 
 Also acknowledge [AquaCrop-OSPy](https://github.com/aquacropos/aquacrop) (and FAO AquaCrop) for the underlying crop water-productivity model that the kernels follow.
 
-
----
-
-## Support / Apoie o projeto
-
-If you find AquaGrid useful for your work, consider supporting its development through GitHub Sponsors:
-
-<p align="center">
-<a href="https://github.com/sponsors/Paloschi"><img alt="Sponsor" src="https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white"></a>
-</p>
 
 ---
 
