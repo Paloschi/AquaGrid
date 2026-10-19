@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-19
+
+### Changed
+
+- Cache compiled CPU kernels on disk so a later process loads them instead of compiling again.
+
 ## [0.3.1] - 2026-10-07
 
 ### Fixed
@@ -51,7 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial AquaGrid package: zarr climate/sowing in, Numba CPU and GPU
   kernels, YAML CLI, and pytest suite with bit-exact AquaCrop-OSPy parity.
 
-[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Paloschi/aquagrid/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Paloschi/aquagrid/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Paloschi/aquagrid/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Paloschi/aquagrid/compare/v0.1.1...v0.2.0

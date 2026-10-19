@@ -9,6 +9,8 @@ producing an independent, fully-jitted namespace per backend.
 from __future__ import annotations
 
 import inspect
+import sys
+import types
 
 _CACHE: dict[str, dict] = {}
 
@@ -25,7 +27,9 @@ def load_kernels(backend: str = "cpu") -> dict:
         from numba import njit
 
         def kernel(f):
-            return njit(f, cache=False)
+            # Disk cache: a later process loads the machine code instead of
+            # compiling again. NUMBA_CACHE_DIR relocates the files.
+            return njit(f, cache=True)
 
     elif backend == "gpu":
         from numba import cuda
@@ -36,10 +40,18 @@ def load_kernels(backend: str = "cpu") -> dict:
     else:
         raise ValueError(f"unknown backend: {backend!r}")
 
-    src = inspect.getsource(impl_mod)
-    ns: dict = {"kernel": kernel, "__name__": f"aquagrid.kernels.impl_{backend}"}
-    code = compile(src, impl_mod.__file__, "exec")
-    exec(code, ns)
+    # A real module, registered before compilation. Numba reloads a cached
+    # kernel by importing its module; an exec dict with no sys.modules entry
+    # is pickled as "<dynamic>" and the next process cannot load it.
+    modname = f"aquagrid.kernels.impl_{backend}"
+    module = types.ModuleType(modname)
+    module.__file__ = impl_mod.__file__
+    module.__package__ = impl_mod.__package__
+    module.kernel = kernel
+    sys.modules[modname] = module
+    code = compile(inspect.getsource(impl_mod), impl_mod.__file__, "exec")
+    exec(code, module.__dict__)
 
+    ns = module.__dict__
     _CACHE[backend] = ns
     return ns
