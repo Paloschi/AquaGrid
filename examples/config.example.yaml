@@ -13,6 +13,18 @@ soil:
   zarr: null                     # hydraulic or texture raster; null uses name
   ksat_unit: cm/d                # float hydraulic Ksat: cm/d or mm/d
   scale_factors: {}              # hydraulic only, e.g. {ksat: 10}; else ignored
+irrigation:
+  method: 0                      # 0 rainfed | 1 SMT | 2 interval | 3 schedule | 4 net | 5 depth
+  wet_surf: 100                  # soil surface wetted by irrigation (%)
+  app_eff: 100                   # application efficiency (%)
+  max_irr: 25                    # maximum depth per day (mm)
+  max_irr_season: 10000          # seasonal cap (mm); method 4 ignores it
+  smt: [100, 100, 100, 100]      # method 1, % of TAW in four stages
+  interval: 3                    # method 2, days between events
+  net_irr_smt: 80                # method 4, % of TAW to maintain
+  depth: 0                       # method 5, mm applied every day
+  schedule: null                 # method 3 depth zarr (time, y, x); null skips it
+  zarr: null                     # optional (param, y, x) cube; null skips it
 
 backend: cpu                     # cpu | gpu
 options:

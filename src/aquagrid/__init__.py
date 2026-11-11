@@ -14,4 +14,4 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("aquagrid")
 except PackageNotFoundError:
-    __version__ = "0.3.2"
+    __version__ = "0.4.0"

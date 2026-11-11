@@ -104,13 +104,44 @@ parameter from the named crop. A NaN does not mask the pixel. Without this
 store every pixel uses the named crop alone. Soil compartments are deepened
 to the deepest finite `Zmax` in the cube.
 
+## Irrigation (input, optional)
+
+Absent irrigation is method 0 (rainfed). A uniform strategy lives in the
+YAML `irrigation` block. A zarr `(param, y, x)` with data variable
+`irrigation` overrides that vector per pixel. A missing layer, or a NaN
+cell, keeps the YAML value. A NaN does not mask the pixel.
+
+| param | meaning |
+|-------|---------|
+| `method` | 0 rainfed, 1 soil-moisture targets, 2 fixed interval, 3 schedule, 4 net, 5 constant depth |
+| `wet_surf` | soil surface wetted by irrigation (%) |
+| `app_eff` | application efficiency (%) |
+| `max_irr` | maximum depth per day (mm) |
+| `max_irr_season` | maximum depth over the season (mm); ignored by method 4 |
+| `smt0`–`smt3` | soil-moisture targets (% of TAW) for growth stages 1–4 (method 1) |
+| `interval` | days between events (method 2) |
+| `net_irr_smt` | root-zone moisture to maintain (% of TAW, method 4) |
+| `depth` | constant daily depth (mm, method 5) |
+
+Method 3 reads a separate store: variable `depth` (mm), dims
+`(time, y, x)`, aligned to the climate grid. 0 is a day without an
+event. A non-finite cell is read as 0. The kernel indexes this series
+by the climate day, not by days after planting. Method 3 requires the
+schedule. Methods 0, 1, 2, 4 and 5 do not read it.
+
+No bunds, mulches, or groundwater table. One season per pixel.
+
 ## Outputs
 
-Rainfed, one season per pixel, no irrigation and no groundwater table.
+One season per pixel, no groundwater table. Irrigation follows the
+method above; method 0 applies none.
 
 Final fields are `(y, x)`: `dry_yield`, `fresh_yield`, `yield_pot`
 (float32, tonne/ha), `biomass`, `biomass_ns` (float32, g/m²), `hi_adj`
-(float32, -), `dap_end` (int16, days after planting), `status` (int8).
+(float32, -), `irr_cum` (float32, mm), `dap_end` (int16, days after planting), `status` (int8).
+
+`irr_cum` is the seasonal total: gross irrigation for methods 0–3 and 5,
+net irrigation (including day-1 pre-irrigation) for method 4.
 
 `status`:
 
@@ -123,5 +154,5 @@ Final fields are `(y, x)`: `dry_yield`, `fresh_yield`, `yield_pot`
 
 Optional daily fields are `(time, y, x)`, float32, in group `daily` of
 the same store: `canopy_cover` (-), `biomass` (g/m²), `z_root` (m),
-`gdd_cum` (°C day), `es` (mm), `tr` (mm), `wr` (mm). A day outside that
+`gdd_cum` (°C day), `es` (mm), `tr` (mm), `wr` (mm), `irr` (mm). A day outside that
 pixel's season is `NaN`. A pixel with status 1 or 2 is `NaN` on every day.

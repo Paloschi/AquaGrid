@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from aquagrid.kernels.constants import CP_N, OD_N, OF_N
+from aquagrid.kernels.constants import CP_N, IP_N, OD_N, OF_N
+from aquagrid.params import default_irrigation_params
 
 _HYDRAULIC = (
     "th_fc", "th_s", "th_wp", "th_dry", "ksat", "tau", "penetrability",
@@ -38,6 +39,8 @@ def run_grid_arrays(
     sp: np.ndarray,
     profile: dict[str, np.ndarray],
     th_init: np.ndarray,
+    ip: np.ndarray | None = None,
+    schedule: np.ndarray | None = None,
     backend: str = "cpu",
     save_daily: bool = False,
     evap_time_steps: int = 20,
@@ -56,6 +59,10 @@ def run_grid_arrays(
             ``layer``) is 1-D ``(ncomp,)``. Hydraulic properties may be
             ``(ncomp,)`` (shared) or ``(npixel, ncomp)``.
         th_init: ``(ncomp,)`` or ``(npixel, ncomp)`` initial θ.
+        ip: irrigation parameters, shape (IP_N,) shared or (npixel, IP_N).
+            ``None`` is rainfed (method 0).
+        schedule: method-3 depths (mm), shape (time, npixel). ``None``
+            is an all-zero schedule. Other methods do not read it.
 
     Returns:
         (out_final (npixel, OF_N), out_daily (OD_N, time, npixel) or None)
@@ -75,6 +82,19 @@ def run_grid_arrays(
     if cp2.shape[1] != CP_N:
         raise ValueError(f"cp has {cp2.shape[1]} parameters, expected {CP_N}")
     sp2 = _pixel_rows(sp, npix, "sp")
+    if ip is None:
+        ip = default_irrigation_params()
+    ip2 = _pixel_rows(ip, npix, "ip")
+    if ip2.shape[1] != IP_N:
+        raise ValueError(f"ip has {ip2.shape[1]} parameters, expected {IP_N}")
+    if schedule is None:
+        schedule = np.zeros((nt, npix), f8)
+    else:
+        schedule = np.ascontiguousarray(schedule, f8)
+        if schedule.shape != (nt, npix):
+            raise ValueError(
+                f"schedule shape {schedule.shape} does not match "
+                f"({nt}, {npix})")
     thini = _pixel_rows(th_init, npix, "th_init")
     hyd = {k: _pixel_rows(profile[k], npix, k) for k in _HYDRAULIC}
     for k in _HYDRAULIC:
@@ -97,7 +117,7 @@ def run_grid_arrays(
 
     args = (
         plant_idx, nt, tmin, tmax, prcp, et0,
-        cp2, sp2,
+        cp2, sp2, ip2, schedule,
         ncomp, nlayer,
         geom["dz"], geom["dzsum"],
         hyd["th_fc"], hyd["th_s"], hyd["th_wp"], hyd["th_dry"],

@@ -9,14 +9,19 @@ import pandas as pd
 import xarray as xr
 
 from aquagrid.engine.run import run_grid_arrays
-from aquagrid.io.schema import open_climate, open_sowing, sowing_to_plant_idx
+from aquagrid.io.schema import (
+    open_climate, open_irrigation_schedule, open_sowing, sowing_to_plant_idx,
+)
 from aquagrid.io.soil import SoilGrid, open_soil, validate_soil_grid
 from aquagrid.kernels import constants as C
 from aquagrid.params import (
     apply_crop_cube,
+    apply_irrigation_cube,
     co2_concentration_for_year,
     crop_params_array,
+    default_irrigation_params,
     initial_water_content,
+    irrigation_params_array,
     soil_params,
 )
 from aquagrid.soil_grid import profiles_from_store
@@ -31,6 +36,7 @@ FINAL_VARS = {
     "biomass_ns": (C.OF_BIOMASS_NS, np.float32),
     "hi_adj": (C.OF_HI_ADJ, np.float32),
     "dap_end": (C.OF_DAP_END, np.int16),
+    "irr_cum": (C.OF_IRR_CUM, np.float32),
 }
 
 DAILY_VARS = {
@@ -41,6 +47,7 @@ DAILY_VARS = {
     "es": C.OD_ES,
     "tr": C.OD_TR,
     "wr": C.OD_WR,
+    "irr": C.OD_IRR,
 }
 
 
@@ -90,6 +97,26 @@ def _open_crop_cube(store: str | Path) -> xr.DataArray:
     return da.transpose("param", "y", "x")
 
 
+def _open_irrigation_cube(store: str | Path) -> xr.DataArray:
+    """Open an irrigation-parameter cube. The data variable is
+    ``irrigation``, or the only array with dims ``(param, y, x)``."""
+    ds = xr.open_zarr(store, decode_timedelta=False)
+    if "irrigation" in ds.data_vars:
+        da = ds["irrigation"]
+    else:
+        found = [name for name, var in ds.data_vars.items()
+                 if set(var.dims) == {"param", "y", "x"}]
+        if len(found) != 1:
+            raise ValueError(
+                "irrigation store needs a variable 'irrigation' "
+                "with dims (param, y, x)")
+        da = ds[found[0]]
+    if set(da.dims) != {"param", "y", "x"}:
+        raise ValueError(
+            f"irrigation cube dims must be (param, y, x), got {da.dims}")
+    return da.transpose("param", "y", "x")
+
+
 def run_grid(
     climate: str | Path,
     sowing: str | Path,
@@ -109,6 +136,9 @@ def run_grid(
     parallel: bool = True,
     evap_time_steps: int = 20,
     max_season_days: int = 400,
+    ip: np.ndarray | None = None,
+    irrigation_zarr: str | Path | None = None,
+    irrigation_schedule: str | Path | None = None,
 ) -> Path:
     """Run AquaCrop over a grid, tile by tile, writing results to zarr.
 
@@ -128,6 +158,13 @@ def run_grid(
     ``crop_name`` selects the AquaCrop crop. ``crop_zarr``, when given,
     is a ``(param, y, x)`` cube of per-pixel overrides. A missing layer
     or a NaN cell keeps the named-crop value.
+
+    ``ip`` is a uniform irrigation vector (``IP_N``,). ``None`` is
+    rainfed, method 0. ``irrigation_zarr``, when given, is a
+    ``(param, y, x)`` cube of per-pixel overrides on that vector. A
+    missing layer or a NaN cell keeps the uniform value.
+    ``irrigation_schedule`` is a method-3 ``depth`` zarr, mm, dims
+    ``(time, y, x)``. It is required when any pixel uses method 3.
 
     ``sowing_var`` is the variable in the sowing store (default
     ``sowing``). ``initial_wc`` is ``FC``, ``WP`` or ``SAT`` on either
@@ -204,6 +241,32 @@ def run_grid(
             "initial_wc": initial_wc,
         }
 
+    if ip is None:
+        ip = default_irrigation_params()
+    ip = np.asarray(ip, np.float64)
+    if irrigation_zarr is not None:
+        if ip.ndim != 1:
+            raise ValueError(
+                "irrigation_zarr overrides a uniform parameter vector")
+        irr_cube = _open_irrigation_cube(irrigation_zarr)
+        if (irr_cube.sizes["y"] != ds.sizes["y"]
+                or irr_cube.sizes["x"] != ds.sizes["x"]):
+            raise ValueError(
+                f"irrigation cube {(irr_cube.sizes['y'], irr_cube.sizes['x'])} "
+                f"does not match climate grid "
+                f"({ds.sizes['y']}, {ds.sizes['x']})")
+        ip = apply_irrigation_cube(ip, irr_cube)
+
+    ny, nx = sow_np.shape
+    if irrigation_schedule is not None:
+        schedule = open_irrigation_schedule(
+            irrigation_schedule, len(time), ny, nx)
+    else:
+        schedule = None
+    methods = ip[:, :, C.IP_METHOD] if ip.ndim == 3 else ip[C.IP_METHOD]
+    if np.any(methods == 3) and schedule is None:
+        raise ValueError("irrigation method 3 needs irrigation.schedule")
+
     # initialise output stores (metadata only)
     output = Path(output)
     final_t, daily_t = _output_templates(time, ds.y.values, ds.x.values,
@@ -217,13 +280,13 @@ def run_grid(
         y1 = min(y0 + tile, ny)
         for x0 in range(0, nx, tile):
             x1 = min(x0 + tile, nx)
-            _run_tile(ds, plant_idx, cp, soil_ctx, time,
+            _run_tile(ds, plant_idx, cp, ip, schedule, soil_ctx, time,
                       y0, y1, x0, x1, output, backend, save_daily,
                       parallel, evap_time_steps, max_season_days)
     return output
 
 
-def _run_tile(ds, plant_idx, cp, soil_ctx, time,
+def _run_tile(ds, plant_idx, cp, ip, schedule, soil_ctx, time,
               y0, y1, x0, x1, output, backend, save_daily,
               parallel, evap_time_steps, max_season_days):
     tny, tnx = y1 - y0, x1 - x0
@@ -238,6 +301,13 @@ def _run_tile(ds, plant_idx, cp, soil_ctx, time,
     pidx = plant_idx[y0:y1, x0:x1].reshape(npix)
     if cp.ndim == 3:
         cp = cp[y0:y1, x0:x1].reshape(npix, cp.shape[-1])
+    if ip.ndim == 3:
+        ip = ip[y0:y1, x0:x1].reshape(npix, ip.shape[-1])
+    if schedule is None:
+        sched = None
+    else:
+        sched = np.ascontiguousarray(
+            schedule[:, y0:y1, x0:x1].reshape(nt, npix), np.float64)
 
     if soil_ctx["mode"] == "named":
         sp, prof, thini = soil_ctx["sp"], soil_ctx["prof"], soil_ctx["thini"]
@@ -252,6 +322,7 @@ def _run_tile(ds, plant_idx, cp, soil_ctx, time,
         tmin=weather["tmin"], tmax=weather["tmax"],
         prcp=weather["precip"], et0=weather["eto"],
         plant_idx=pidx, cp=cp, sp=sp, profile=prof, th_init=thini,
+        ip=ip, schedule=sched,
         backend=backend, save_daily=save_daily, parallel=parallel,
         evap_time_steps=evap_time_steps, max_season_days=max_season_days,
     )
@@ -294,6 +365,16 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
     - ``soil.name`` or ``soil.zarr`` — exactly one soil source
     - ``soil.ksat_unit`` (``cm/d``) — float hydraulic Ksat unit
     - ``soil.scale_factors`` — hydraulic multipliers; ignored otherwise
+    - ``irrigation.method`` (0) — 0 rainfed, 1 soil-moisture targets,
+      2 fixed interval, 3 schedule, 4 net, 5 constant depth
+    - ``irrigation.wet_surf`` (100), ``irrigation.app_eff`` (100),
+      ``irrigation.max_irr`` (25), ``irrigation.max_irr_season`` (10000)
+    - ``irrigation.smt`` — four stage targets (% TAW); method 1
+    - ``irrigation.interval`` (3) — days; method 2
+    - ``irrigation.net_irr_smt`` (80) — method 4
+    - ``irrigation.depth`` (0) — mm each day; method 5
+    - ``irrigation.schedule`` — method-3 depth zarr; ``irrigation.zarr``
+      — optional per-pixel parameter cube
     - ``backend`` (``cpu``) — ``cpu`` or ``gpu``
     - ``options.save_daily`` (false), ``options.tile`` (128),
       ``options.parallel`` (true), ``options.evap_time_steps`` (20),
@@ -307,9 +388,26 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
     cfg = yaml.safe_load(Path(config).read_text(encoding="utf-8"))
     opts = cfg.get("options", {})
     soil_cfg = cfg.get("soil") or {}
+    irr_cfg = cfg.get("irrigation") or {}
     scale = soil_cfg.get("scale_factors")
     if scale is not None:
         scale = {str(k).lower(): float(v) for k, v in scale.items()}
+    from aquacrop import IrrigationManagement
+
+    method = int(irr_cfg.get("method", 0))
+    irr_kw = {
+        "WetSurf": float(irr_cfg.get("wet_surf", 100)),
+        "AppEff": float(irr_cfg.get("app_eff", 100)),
+        "MaxIrr": float(irr_cfg.get("max_irr", 25)),
+        "MaxIrrSeason": float(irr_cfg.get("max_irr_season", 10000)),
+        "IrrInterval": int(irr_cfg.get("interval", 3)),
+        "NetIrrSMT": float(irr_cfg.get("net_irr_smt", 80)),
+        "depth": float(irr_cfg.get("depth", 0)),
+    }
+    smt = irr_cfg.get("smt")
+    if smt is not None:
+        irr_kw["SMT"] = [float(value) for value in smt]
+    ip = irrigation_params_array(IrrigationManagement(method, **irr_kw))
     return run_grid(
         climate=cfg["climate"],
         sowing=cfg["sowing"],
@@ -328,4 +426,7 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
         parallel=bool(opts.get("parallel", True)),
         evap_time_steps=int(opts.get("evap_time_steps", 20)),
         max_season_days=int(opts.get("max_season_days", 400)),
+        ip=ip,
+        irrigation_zarr=irr_cfg.get("zarr"),
+        irrigation_schedule=irr_cfg.get("schedule"),
     )

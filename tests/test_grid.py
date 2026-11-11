@@ -446,3 +446,170 @@ def test_run_grid_rejects_misaligned_crop_cube(tmp_path):
             crop_zarr=tmp_path / "crop.zarr",
         )
 
+
+def test_irrigation_cube_and_schedule(tmp_path):
+    """Method 5, a per-pixel method override, and a method-3 schedule."""
+    import yaml
+    from aquacrop import IrrigationManagement
+
+    from aquagrid.kernels import constants as C
+    from aquagrid.params import apply_irrigation_cube, irrigation_params_array
+
+    generate_synthetic(tmp_path, ny=1, nx=2, days=20, seed=1)
+    sow = np.array([[2019121, 2019121]], np.int32)
+    xr.Dataset(
+        {"sowing": (("y", "x"), sow)},
+        coords={"y": [0], "x": [0, 1]},
+    ).to_zarr(tmp_path / "sowing.zarr", mode="w")
+    climate = tmp_path / "climate.zarr"
+    sowing = tmp_path / "sowing.zarr"
+
+    irr = IrrigationManagement(5, depth=5)
+    ip = irrigation_params_array(irr)
+    assert ip[C.IP_METHOD] == 5
+    assert ip[C.IP_DEPTH] == 5
+
+    uniform = run_grid(
+        climate, sowing, tmp_path / "uniform.zarr", "Maize", "SandyLoam",
+        ip=ip, save_daily=True, max_season_days=12, parallel=False,
+    )
+    got = xr.open_zarr(uniform, decode_timedelta=False)
+    assert got.irr_cum.values[0, 0] == pytest.approx(60.0)
+    assert got.irr_cum.values[0, 1] == pytest.approx(60.0)
+    daily = xr.open_zarr(uniform, group="daily", decode_timedelta=False)
+    season = np.isfinite(daily.irr.values[:, 0, 0])
+    assert season.sum() == 12
+    assert daily.irr.values[season, 0, 0].sum() == pytest.approx(60.0)
+
+    cfg = {
+        "climate": str(climate),
+        "sowing": str(sowing),
+        "output": str(tmp_path / "yaml.zarr"),
+        "crop": {"name": "Maize"},
+        "soil": {"name": "SandyLoam"},
+        "irrigation": {"method": 5, "depth": 5, "smt": [40, 50, 60, 70]},
+        "options": {"save_daily": False, "max_season_days": 12, "parallel": False},
+    }
+    (tmp_path / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    via_yaml = run_from_config(tmp_path / "config.yaml")
+    yaml_out = xr.open_zarr(via_yaml, decode_timedelta=False)
+    np.testing.assert_allclose(yaml_out.irr_cum.values, got.irr_cum.values)
+
+    cube = xr.DataArray(
+        np.array([[[np.nan, 0.0]]], np.float64),
+        dims=("param", "y", "x"),
+        coords={"param": ["method"], "y": [0], "x": [0, 1]},
+    )
+    expanded = apply_irrigation_cube(ip, cube)
+    assert expanded[0, 0, C.IP_METHOD] == 5
+    assert expanded[0, 1, C.IP_METHOD] == 0
+    with pytest.raises(ValueError, match="unknown irrigation"):
+        apply_irrigation_cube(ip, cube.assign_coords(param=["nope"]))
+    broken = IrrigationManagement(1)
+    broken.SMT = [1, 2, 3]
+    with pytest.raises(ValueError, match="SMT"):
+        irrigation_params_array(broken)
+
+    cube_path = tmp_path / "irr.zarr"
+    cube.to_dataset(name="irrigation").to_zarr(cube_path, mode="w")
+    mixed = run_grid(
+        climate, sowing, tmp_path / "mixed.zarr", "Maize", "SandyLoam",
+        ip=ip, irrigation_zarr=cube_path, max_season_days=12, parallel=False,
+    )
+    mixed_out = xr.open_zarr(mixed, decode_timedelta=False)
+    assert mixed_out.irr_cum.values[0, 0] == pytest.approx(60.0)
+    assert mixed_out.irr_cum.values[0, 1] == 0
+
+    with pytest.raises(ValueError, match="method 3"):
+        run_grid(
+            climate, sowing, tmp_path / "nosched.zarr", "Maize", "SandyLoam",
+            ip=irrigation_params_array(IrrigationManagement(3)),
+        )
+
+    depth = np.zeros((20, 1, 2), np.float32)
+    depth[1, 0, :] = 5
+    depth[4, 0, :] = 7
+    depth[8, 0, :] = 9
+    sched = tmp_path / "sched.zarr"
+    time = xr.open_zarr(climate, decode_timedelta=False).time
+    xr.Dataset(
+        {"depth": (("time", "y", "x"), depth)},
+        coords={"time": time, "y": [0], "x": [0, 1]},
+    ).to_zarr(sched, mode="w")
+    scheduled = run_grid(
+        climate, sowing, tmp_path / "sched_out.zarr", "Maize", "SandyLoam",
+        ip=irrigation_params_array(IrrigationManagement(3, MaxIrr=40)),
+        irrigation_schedule=sched, save_daily=True,
+        max_season_days=12, parallel=False,
+    )
+    sched_out = xr.open_zarr(scheduled, decode_timedelta=False)
+    assert sched_out.irr_cum.values[0, 0] == pytest.approx(21.0)
+    daily_s = xr.open_zarr(scheduled, group="daily", decode_timedelta=False)
+    assert daily_s.irr.values[1, 0, 0] == pytest.approx(5.0)
+    assert daily_s.irr.values[0, 0, 0] == pytest.approx(0.0)
+
+
+def test_schedule_array_shape_is_rejected():
+    from aquacrop import Crop, Soil
+
+    from aquagrid.engine.run import run_grid_arrays
+    from aquagrid.params import (
+        co2_concentration_for_year, crop_params_array,
+        initial_water_content, soil_params,
+    )
+
+    crop = Crop("Maize", planting_date="05/01")
+    soil = Soil("SandyLoam")
+    cp = crop_params_array(crop, co2_conc=co2_concentration_for_year(2019))
+    sp, prof = soil_params(soil, zmax=crop.Zmax)
+    thini = initial_water_content(soil, "FC")
+    weather = np.zeros((5, 1), np.float64)
+    common = dict(
+        tmin=weather, tmax=weather + 10, prcp=weather, et0=weather + 3,
+        plant_idx=np.array([0], np.int64),
+        cp=cp, sp=sp, profile=prof, th_init=thini, parallel=False,
+    )
+    with pytest.raises(ValueError, match="schedule shape"):
+        run_grid_arrays(schedule=np.zeros((5, 2)), **common)
+    with pytest.raises(ValueError, match="expected"):
+        run_grid_arrays(ip=np.zeros(3), **common)
+
+
+def test_run_grid_rejects_bad_irrigation_cube(tmp_path):
+    climate, sowing = _tiny_grid(tmp_path)
+    with pytest.raises(ValueError, match="uniform parameter vector"):
+        run_grid(
+            climate, sowing, tmp_path / "out.zarr", "Maize", "SandyLoam",
+            ip=np.zeros((2, 3)), irrigation_zarr=tmp_path / "missing.zarr",
+        )
+
+    xr.Dataset(
+        {"nope": (("y", "x"), np.zeros((2, 2)))},
+        coords={"y": [0, 1], "x": [0, 1]},
+    ).to_zarr(tmp_path / "irr.zarr", mode="w")
+    with pytest.raises(ValueError, match="needs a variable 'irrigation'"):
+        run_grid(
+            climate, sowing, tmp_path / "out.zarr", "Maize", "SandyLoam",
+            irrigation_zarr=tmp_path / "irr.zarr",
+        )
+
+    xr.Dataset(
+        {"irrigation": (("y", "x"), np.zeros((2, 2)))},
+        coords={"y": [0, 1], "x": [0, 1]},
+    ).to_zarr(tmp_path / "dims.zarr", mode="w")
+    with pytest.raises(ValueError, match=r"\(param, y, x\)"):
+        run_grid(
+            climate, sowing, tmp_path / "out.zarr", "Maize", "SandyLoam",
+            irrigation_zarr=tmp_path / "dims.zarr",
+        )
+
+    xr.Dataset(
+        {"irrigation": (("param", "y", "x"), np.zeros((1, 1, 1)))},
+        coords={"param": ["method"], "y": [0], "x": [0]},
+    ).to_zarr(tmp_path / "small.zarr", mode="w")
+    with pytest.raises(ValueError, match="irrigation cube"):
+        run_grid(
+            climate, sowing, tmp_path / "out.zarr", "Maize", "SandyLoam",
+            irrigation_zarr=tmp_path / "small.zarr",
+        )
+

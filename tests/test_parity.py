@@ -13,13 +13,16 @@ from aquagrid.kernels import constants as C
 from aquagrid.params import (
     co2_concentration_for_year,
     crop_params_array,
+    default_irrigation_params,
     initial_water_content,
+    irrigation_params_array,
     soil_params,
 )
 
 
 def run_reference(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
-                  planting: str, *, crop=None, soil=None, initial_wc=None):
+                  planting: str, *, crop=None, soil=None, initial_wc=None,
+                  irrigation=None):
     """Run original aquacrop from planting date to end of weather.
 
     ``crop`` / ``soil`` override the named presets so a raster profile or a
@@ -42,6 +45,7 @@ def run_reference(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
         soil=soil,
         crop=crop,
         initial_water_content=initial_wc,
+        irrigation_management=irrigation,
     )
     model.run_model(till_termination=True)
     return model
@@ -64,6 +68,7 @@ def assert_ospy_parity(model, fin, daily, pixel: int = 0) -> None:
         (C.OD_ES, flux["Es"].to_numpy()[:n_days], 1e-12),
         (C.OD_TR, flux["Tr"].to_numpy()[:n_days], 1e-12),
         (C.OD_WR, flux["Wr"].to_numpy()[:n_days], 1e-12),
+        (C.OD_IRR, flux["IrrDay"].to_numpy()[:n_days], 1e-12),
     )
     for od, ref, atol in daily_pairs:
         np.testing.assert_allclose(
@@ -77,6 +82,7 @@ def assert_ospy_parity(model, fin, daily, pixel: int = 0) -> None:
         (C.OF_BIOMASS, float(growth["biomass"].iloc[last]), 1e-10),
         (C.OF_BIOMASS_NS, float(growth["biomass_ns"].iloc[last]), 1e-10),
         (C.OF_HI_ADJ, float(growth["harvest_index_adj"].iloc[last]), 1e-12),
+        (C.OF_IRR_CUM, float(stats["Seasonal irrigation (mm)"].iloc[0]), 1e-12),
     )
     for of, ref, atol in finals:
         assert fin[pixel, of] == pytest.approx(ref, rel=1e-12, abs=atol)
@@ -85,7 +91,7 @@ def assert_ospy_parity(model, fin, daily, pixel: int = 0) -> None:
 
 
 def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
-                    planting: str):
+                    planting: str, *, irrigation=None, schedule=None):
     """Run AquaGrid kernels for a single pixel starting at ``planting``."""
     start = pd.Timestamp(planting)
     plant_idx = int((weather_df.Date == start).idxmax())
@@ -99,6 +105,10 @@ def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
     cp = crop_params_array(crop, co2_conc=co2)
     sp, prof = soil_params(soil, zmax=crop.Zmax)
     thini = initial_water_content(soil, "FC")
+    if irrigation is None:
+        ip = default_irrigation_params()
+    else:
+        ip = irrigation_params_array(irrigation)
 
     fin, daily = run_grid_arrays(
         tmin=sub.MinTemp.to_numpy()[:, None],
@@ -107,6 +117,7 @@ def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
         et0=sub.ReferenceET.to_numpy()[:, None],
         plant_idx=np.array([0], np.int64),
         cp=cp, sp=sp, profile=prof, th_init=thini,
+        ip=ip, schedule=schedule,
         save_daily=True, parallel=False,
     )
     return fin, daily, nt
@@ -126,3 +137,64 @@ def test_parity_vs_aquacrop(weather_df, crop_name, soil_name, planting):
     fin, daily, nt = run_grid_kernel(weather_df, crop_name, soil_name, planting)
 
     assert_ospy_parity(model, fin, daily)
+
+
+def _events_frame(weather_df, planting, events):
+    """Schedule array indexed from planting, plus the OSPy date frame."""
+    start = pd.Timestamp(planting)
+    plant_idx = int(np.flatnonzero(weather_df.Date == start)[0])
+    sub = weather_df.iloc[plant_idx:].reset_index(drop=True)
+    schedule = np.zeros((len(sub), 1), np.float64)
+    rows = []
+    for date, depth in events:
+        ts = pd.Timestamp(date)
+        hit = np.flatnonzero(sub.Date == ts)
+        assert hit.size == 1
+        schedule[int(hit[0]), 0] = depth
+        rows.append({"Date": ts, "Depth": depth})
+    return schedule, pd.DataFrame(rows)
+
+
+IRRIGATION_CASES = [
+    ("Maize", "SandyLoam", "2019/05/15", 1,
+     dict(SMT=[60, 70, 80, 50], AppEff=90, MaxIrr=15, WetSurf=80,
+          MaxIrrSeason=400)),
+    ("MaizeGDD", "SandyLoam", "2019/05/15", 2,
+     dict(IrrInterval=10, AppEff=85, MaxIrr=20)),
+    ("SoybeanGDD", "ClayLoam", "2019/06/01", 4,
+     dict(NetIrrSMT=65)),
+    ("Maize", "Clay", "2019/10/01", 5,
+     dict(depth=4, MaxIrr=10, WetSurf=50, AppEff=70)),
+]
+
+
+@pytest.mark.parametrize(
+    "crop_name,soil_name,planting,method,options", IRRIGATION_CASES)
+def test_irrigation_parity(weather_df, crop_name, soil_name, planting,
+                           method, options):
+    from aquacrop import IrrigationManagement
+
+    irrigation = IrrigationManagement(method, **options)
+    model = run_reference(
+        weather_df, crop_name, soil_name, planting, irrigation=irrigation)
+    fin, daily, _nt = run_grid_kernel(
+        weather_df, crop_name, soil_name, planting, irrigation=irrigation)
+    assert_ospy_parity(model, fin, daily)
+    assert fin[0, C.OF_IRR_CUM] > 0
+
+
+def test_schedule_irrigation_parity(weather_df):
+    from aquacrop import IrrigationManagement
+
+    planting = "2019/05/15"
+    events = [("2019-06-10", 20.0), ("2019-07-20", 15.0), ("2019-08-15", 25.0)]
+    schedule, frame = _events_frame(weather_df, planting, events)
+    irrigation = IrrigationManagement(
+        3, Schedule=frame, MaxIrr=40, AppEff=80, WetSurf=70)
+    model = run_reference(
+        weather_df, "Maize", "SandyLoam", planting, irrigation=irrigation)
+    fin, daily, _nt = run_grid_kernel(
+        weather_df, "Maize", "SandyLoam", planting,
+        irrigation=irrigation, schedule=schedule)
+    assert_ospy_parity(model, fin, daily)
+    assert fin[0, C.OF_IRR_CUM] == pytest.approx(20 + 15 + 25)

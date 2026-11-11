@@ -151,3 +151,36 @@ def test_synthetic_soil_schema(synth_dir):
     assert ds.depths == ("0-5", "5-15", "15-30", "30-60", "60-100")
     assert ds.shape == (6, 5)
     assert ds.ds.ksat.dims == ("depth", "y", "x")
+
+
+def test_irrigation_schedule_schema(tmp_path):
+    from aquagrid.io import open_irrigation_schedule
+
+    time = pd.date_range("2019-05-01", periods=4, freq="D")
+    depth = np.zeros((4, 2, 1), np.float32)
+    depth[0, 0, 0] = 1.0
+    depth[1, 1, 0] = np.nan
+    xr.Dataset(
+        {"depth": (("time", "y", "x"), depth)},
+        coords={"time": time, "y": [0, 1], "x": [0]},
+    ).to_zarr(tmp_path / "sched.zarr", mode="w")
+    got = open_irrigation_schedule(tmp_path / "sched.zarr", 4, 2, 1)
+    assert got[0, 0, 0] == 1.0
+    assert got[1, 1, 0] == 0.0
+
+    xr.Dataset(
+        {"rain": (("time", "y", "x"), depth)},
+        coords={"time": time, "y": [0, 1], "x": [0]},
+    ).to_zarr(tmp_path / "missing.zarr", mode="w")
+    with pytest.raises(ValueError, match="depth"):
+        open_irrigation_schedule(tmp_path / "missing.zarr", 4, 2, 1)
+
+    xr.Dataset(
+        {"depth": (("y", "x"), np.zeros((2, 1)))},
+        coords={"y": [0, 1], "x": [0]},
+    ).to_zarr(tmp_path / "dims.zarr", mode="w")
+    with pytest.raises(ValueError, match="time, y, x"):
+        open_irrigation_schedule(tmp_path / "dims.zarr", 4, 2, 1)
+
+    with pytest.raises(ValueError, match="does not match"):
+        open_irrigation_schedule(tmp_path / "sched.zarr", 3, 2, 1)

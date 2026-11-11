@@ -74,3 +74,26 @@ def sowing_to_plant_idx(sowing: np.ndarray,
     idx[(idx < 0) | (idx >= len(time))] = -1
     out[valid] = idx
     return out
+
+
+def open_irrigation_schedule(store: str | Path, n_time: int, ny: int,
+                             nx: int) -> np.ndarray:
+    """Open a method-3 irrigation schedule.
+
+    Variable ``depth`` (mm) with dims ``(time, y, x)``, aligned to the
+    climate grid. Non-finite cells become 0 (no event).
+    """
+    ds = xr.open_zarr(store, decode_timedelta=False)
+    if "depth" not in ds:
+        raise ValueError("irrigation schedule missing variable 'depth'")
+    da = ds["depth"]
+    if tuple(da.dims) != ("time", "y", "x"):
+        raise ValueError(
+            f"irrigation schedule dims must be (time, y, x), got {da.dims}")
+    got = (da.sizes["time"], da.sizes["y"], da.sizes["x"])
+    if got != (n_time, ny, nx):
+        raise ValueError(
+            f"irrigation schedule shape {got} does not match climate "
+            f"({n_time}, {ny}, {nx})")
+    arr = np.asarray(da.values, np.float64)
+    return np.where(np.isfinite(arr), arr, 0.0)

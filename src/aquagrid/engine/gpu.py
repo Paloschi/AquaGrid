@@ -26,7 +26,7 @@ def _get_kernel():
 
     @cuda.jit
     def run_all(plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
-                cp, sp, ncomp, nlayer,
+                cp, sp, ip, schedule, ncomp, nlayer,
                 dz, dzsum, th_fc, th_s, th_wp, th_dry, ksat, tau,
                 layer, penetrability, th_init,
                 th2d, thnew2d, flux2d, aer2d,
@@ -40,7 +40,7 @@ def _get_kernel():
             out_final[p, OF_STATUS] = STATUS_NOT_SIMULATED
         else:
             run_pixel(p, pi, nt, tmin2d, tmax2d, prcp2d, et02d,
-                      cp[p], sp[p], ncomp, nlayer,
+                      cp[p], sp[p], ip[p], schedule, ncomp, nlayer,
                       dz, dzsum, th_fc[p], th_s[p], th_wp[p], th_dry[p],
                       ksat[p], tau[p],
                       layer, penetrability[p], th_init[p],
@@ -53,7 +53,7 @@ def _get_kernel():
 
 
 def run_gpu(plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
-            cp, sp, ncomp, nlayer,
+            cp, sp, ip, schedule, ncomp, nlayer,
             dz, dzsum, th_fc, th_s, th_wp, th_dry, ksat, tau,
             layer, penetrability, th_init,
             th2d, thnew2d, flux2d, aer2d,
@@ -73,7 +73,7 @@ def run_gpu(plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
     blocks = (npix + THREADS_PER_BLOCK - 1) // THREADS_PER_BLOCK
     kern[blocks, THREADS_PER_BLOCK](
         d(plant_idx), nt, d(tmin2d), d(tmax2d), d(prcp2d), d(et02d),
-        d(cp), d(sp), ncomp, nlayer,
+        d(cp), d(sp), d(ip), d(schedule), ncomp, nlayer,
         d(dz), d(dzsum), d(th_fc), d(th_s), d(th_wp), d(th_dry),
         d(ksat), d(tau), d(layer), d(penetrability), d(th_init),
         d(th2d), d(thnew2d), d(flux2d), d(aer2d),

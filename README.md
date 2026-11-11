@@ -20,7 +20,7 @@
 <img alt="AquaCrop-OSPy" src="https://img.shields.io/badge/AquaCrop--OSPy-3.x-0F766E?style=flat-square">
 </p>
 <p>
-<img alt="Scope" src="https://img.shields.io/badge/scope-rainfed%20%7C%20one%20season-134E4A?style=flat-square">
+<img alt="Scope" src="https://img.shields.io/badge/scope-irrigation%20%7C%20one%20season-134E4A?style=flat-square">
 <img alt="Parity" src="https://img.shields.io/badge/parity-1e--12%20vs%20OSPy-0F766E?style=flat-square">
 <a href="https://www.conventionalcommits.org/"><img alt="Conventional Commits" src="https://img.shields.io/badge/commits-conventional-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white"></a>
 </p>
@@ -70,9 +70,10 @@ started in [CyMP](https://github.com/Paloschi/CyMP) (Unioeste-LEA).
 | CLI        | **Typer** (`aquagrid`)                                                |
 | Tests      | **pytest** 8 — Ubuntu & Windows, Python 3.11 / 3.12                        |
 
-**Current scope:** rainfed (no irrigation, no groundwater), one season per
-pixel. Soil: a single AquaCrop preset **or** a per-pixel zarr raster
-(HiHydroSoil hydraulics or sand/silt/clay texture).
+**Current scope:** one season per pixel, irrigation methods 0–5 (0 is
+rainfed), no groundwater. Soil: a single AquaCrop preset **or** a
+per-pixel zarr raster (HiHydroSoil hydraulics or sand/silt/clay
+texture).
 
 ---
 
@@ -161,6 +162,18 @@ soil:
   zarr: null                     # hydraulic or texture raster; null uses name
   ksat_unit: cm/d                # float hydraulic Ksat: cm/d or mm/d
   scale_factors: {}              # hydraulic only, e.g. {ksat: 10}; else ignored
+irrigation:
+  method: 0                      # 0 rainfed | 1 SMT | 2 interval | 3 schedule | 4 net | 5 depth
+  wet_surf: 100                  # soil surface wetted by irrigation (%)
+  app_eff: 100                   # application efficiency (%)
+  max_irr: 25                    # maximum depth per day (mm)
+  max_irr_season: 10000          # seasonal cap (mm); method 4 ignores it
+  smt: [100, 100, 100, 100]      # method 1, % of TAW in four stages
+  interval: 3                    # method 2, days between events
+  net_irr_smt: 80                # method 4, % of TAW to maintain
+  depth: 0                       # method 5, mm applied every day
+  schedule: null                 # method 3 depth zarr (time, y, x); null skips it
+  zarr: null                     # optional (param, y, x) cube; null skips it
 
 backend: cpu                     # cpu | gpu
 options:
@@ -247,7 +260,8 @@ aquagrid/
 | Climate  | `(time, y, x)` | `tmin`, `tmax`, `precip`, `eto` (daily, gap-free) |
 | Sowing   | `(y, x)`     | `int32` YYYYDDD; `<= 0` = mask |
 | Soil     | name **or** zarr | AquaCrop preset, or hydraulic / texture raster |
-| Output   | `(y, x)`     | yield, biomass, status; optional `daily/` group |
+| Irrigation | YAML **or** zarr | methods 0–5; optional per-pixel cube and a method-3 schedule |
+| Output   | `(y, x)`     | yield, biomass, irrigation, status; optional `daily/` group |
 
 Grids must already be aligned — AquaGrid does not reproject.
 Details, units, and soil bands: [`docs/zarr-schema.md`](docs/zarr-schema.md).
@@ -312,7 +326,7 @@ If you use AquaGrid in research or operational work, please cite this repository
   title   = {AquaGrid: pixel-wise AquaCrop on rasters (Numba CPU/GPU)},
   year    = {2026},
   url     = {https://github.com/Paloschi/aquagrid},
-  version = {0.3.2}
+  version = {0.4.0}
 }
 ```
 

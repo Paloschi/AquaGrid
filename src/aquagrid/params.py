@@ -1,9 +1,10 @@
 """Flatten aquacrop ``Crop``/``Soil`` objects into kernel parameter arrays.
 
 Reuses the ``aquacrop`` package (Apache-2.0) for its crop database, soil
-pedotransfer functions and default parameters; only the flattening and the
-static (weather-independent) parts of ``compute_crop_calendar`` /
-``compute_variables`` / ``reset_initial_conditions`` are replicated here.
+pedotransfer functions, irrigation defaults and other parameters; only
+the flattening and the static (weather-independent) parts of
+``compute_crop_calendar`` / ``compute_variables`` /
+``reset_initial_conditions`` are replicated here.
 """
 
 from __future__ import annotations
@@ -447,3 +448,76 @@ def initial_water_content(soil, kind: str = "FC") -> np.ndarray:
     if kind == "SAT":
         return prof.th_s.to_numpy(np.float64).copy()
     raise ValueError(f"unsupported initial water content: {kind!r}")
+
+
+def irrigation_params_array(management) -> np.ndarray:
+    """Flatten an aquacrop ``IrrigationManagement`` into the kernel vector.
+
+    ``SMT`` is four soil-moisture targets (% of TAW), one per growth
+    stage. Method 3 depths are not stored here; they travel in the
+    schedule array.
+    """
+    ip = np.zeros(C.IP_N, dtype=np.float64)
+    ip[C.IP_METHOD] = float(management.irrigation_method)
+    ip[C.IP_WET_SURF] = float(management.WetSurf)
+    ip[C.IP_APP_EFF] = float(management.AppEff)
+    ip[C.IP_MAX_IRR] = float(management.MaxIrr)
+    ip[C.IP_MAX_IRR_SEASON] = float(management.MaxIrrSeason)
+    smt = np.asarray(management.SMT, dtype=np.float64).reshape(-1)
+    if smt.shape != (4,):
+        raise ValueError(f"SMT must have 4 values, got {smt.shape[0]}")
+    ip[C.IP_SMT0] = smt[0]
+    ip[C.IP_SMT1] = smt[1]
+    ip[C.IP_SMT2] = smt[2]
+    ip[C.IP_SMT3] = smt[3]
+    ip[C.IP_INTERVAL] = float(management.IrrInterval)
+    ip[C.IP_NET_IRR_SMT] = float(management.NetIrrSMT)
+    ip[C.IP_DEPTH] = float(management.depth)
+    return ip
+
+
+def default_irrigation_params() -> np.ndarray:
+    """Rainfed management (method 0), AquaCrop-OSPy defaults."""
+    from aquacrop import IrrigationManagement
+
+    return irrigation_params_array(IrrigationManagement(0))
+
+
+# Cube layer name -> kernel slot.
+IRRIGATION_PARAM_INDEX: dict[str, int] = {
+    "method": C.IP_METHOD,
+    "wet_surf": C.IP_WET_SURF,
+    "app_eff": C.IP_APP_EFF,
+    "max_irr": C.IP_MAX_IRR,
+    "max_irr_season": C.IP_MAX_IRR_SEASON,
+    "smt0": C.IP_SMT0,
+    "smt1": C.IP_SMT1,
+    "smt2": C.IP_SMT2,
+    "smt3": C.IP_SMT3,
+    "interval": C.IP_INTERVAL,
+    "net_irr_smt": C.IP_NET_IRR_SMT,
+    "depth": C.IP_DEPTH,
+}
+
+
+def apply_irrigation_cube(base: np.ndarray, cube: xr.DataArray) -> np.ndarray:
+    """Broadcast ``base`` ``(IP_N,)`` over a ``(param, y, x)`` cube.
+
+    Missing layers and NaN cells keep the base value. Returns
+    ``(y, x, IP_N)``.
+    """
+    if set(cube.dims) != {"param", "y", "x"}:
+        raise ValueError(
+            f"irrigation cube dims must be (param, y, x), got {cube.dims}")
+    cube = cube.transpose("param", "y", "x")
+    ny, nx = cube.sizes["y"], cube.sizes["x"]
+    out = np.broadcast_to(base, (ny, nx, base.shape[0])).copy()
+    names = [str(name) for name in cube.param.values]
+    unknown = [name for name in names if name not in IRRIGATION_PARAM_INDEX]
+    if unknown:
+        raise ValueError(f"unknown irrigation parameter(s): {unknown}")
+    for name in names:
+        layer = np.asarray(cube.sel(param=name).values, np.float64)
+        good = np.isfinite(layer)
+        out[:, :, IRRIGATION_PARAM_INDEX[name]][good] = layer[good]
+    return out

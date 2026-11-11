@@ -147,6 +147,29 @@ SP_F_EVAP = _m()
 
 SP_N = next(_j)
 
+# --------------------------------------------------------- irrigation params
+_g = iter(range(20))
+
+
+def _q() -> int:
+    return next(_g)
+
+
+IP_METHOD = _q()
+IP_WET_SURF = _q()
+IP_APP_EFF = _q()
+IP_MAX_IRR = _q()
+IP_MAX_IRR_SEASON = _q()
+IP_SMT0 = _q()
+IP_SMT1 = _q()
+IP_SMT2 = _q()
+IP_SMT3 = _q()
+IP_INTERVAL = _q()
+IP_NET_IRR_SMT = _q()
+IP_DEPTH = _q()
+
+IP_N = next(_g)
+
 # ------------------------------------------------------------- final outputs
 _k = iter(range(50))
 
@@ -168,6 +191,7 @@ OF_CROP_MATURE = _o()     # 1.0 if crop reached maturity
 OF_CROP_DEAD = _o()       # 1.0 if canopy died
 OF_GERMINATED = _o()      # 1.0 if crop germinated
 OF_MATURITY_CD = _o()     # maturity in calendar days (per-pixel calendar)
+OF_IRR_CUM = _o()         # mm applied over the season (net when method is 4)
 
 OF_N = next(_k)
 
@@ -186,6 +210,7 @@ OD_GDD_CUM = _p()
 OD_ES = _p()
 OD_TR = _p()
 OD_WR = _p()
+OD_IRR = _p()
 
 OD_N = next(_d)
 

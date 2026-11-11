@@ -9,10 +9,11 @@ Apache-2.0). Each function is a faithful scalar port of the corresponding
 * read crop/soil parameters from flat float64 arrays indexed by the
   constants in :mod:`aquagrid.kernels.constants`.
 
-Scope (phase 1): rainfed simulations, no groundwater table, no irrigation,
-no field management (bunds/mulches), CO2 adjustment precomputed on the
-Python side. Calendar per pixel is computed inside the kernel from the
-pixel's own temperature series (GDD mode) starting at its sowing date.
+Scope: one season per pixel, irrigation methods 0–5, no groundwater
+table, no field management (bunds/mulches). CO2 adjustment is
+precomputed on the Python side. Calendar per pixel is computed inside
+the kernel from the pixel's own temperature series (GDD mode) starting
+at its sowing date.
 
 The module is compiled twice by :mod:`aquagrid.kernels.loader`: with
 ``numba.njit`` for the CPU backend and ``numba.cuda.jit(device=True)`` for
@@ -52,8 +53,11 @@ from aquagrid.kernels.constants import (
     SP_F_WREL_EXP, SP_F_EVAP,
     OF_STATUS, OF_DRY_YIELD, OF_FRESH_YIELD, OF_YIELD_POT, OF_BIOMASS,
     OF_BIOMASS_NS, OF_HI_ADJ, OF_DAP_END, OF_DAY_END, OF_CROP_MATURE,
-    OF_CROP_DEAD, OF_GERMINATED, OF_MATURITY_CD,
+    OF_CROP_DEAD, OF_GERMINATED, OF_MATURITY_CD, OF_IRR_CUM,
+    IP_METHOD, IP_WET_SURF, IP_APP_EFF, IP_MAX_IRR, IP_MAX_IRR_SEASON,
+    IP_SMT0, IP_SMT1, IP_SMT2, IP_SMT3, IP_INTERVAL, IP_NET_IRR_SMT, IP_DEPTH,
     OD_CANOPY_COVER, OD_BIOMASS, OD_Z_ROOT, OD_GDD_CUM, OD_ES, OD_TR, OD_WR,
+    OD_IRR,
     STATUS_OK, STATUS_NO_MATURITY_GDD, STATUS_TRUNCATED,
 )
 
@@ -428,13 +432,18 @@ def rainfall_partition(prcp, th, ncomp, dz, dzsum, th_fc, th_wp,
 
 @kernel
 def infiltration(ncomp, dz, th_fc, th_s, tau, ksat, th_fc_adj,
-                 th, flux_out, infl, surface_storage, deep_perc0, runoff0):
-    """Infiltrate incoming water (rainfed: no bunds, no irrigation).
-    Updates ``th`` and ``flux_out`` in place.
-    Returns (surface_storage, deep_perc, runoff_tot, infl)."""
+                 th, flux_out, infl, surface_storage, deep_perc0, runoff0,
+                 irr, app_eff, growing_season):
+    """Infiltrate rainfall and irrigation (no bunds).
+
+    Gross irrigation is reduced by application efficiency. ``Irr == 0``
+    leaves the rainfed path unchanged. Updates ``th`` and ``flux_out``
+    in place. Returns (surface_storage, deep_perc, runoff_tot, infl)."""
     init_surface_storage = surface_storage * 1.0
 
     infl = fmax(infl, 0.0)
+    if growing_season:
+        infl = infl + (irr * (app_eff / 100.0))
 
     # no bunds on field
     if infl > ksat[0]:
@@ -1224,9 +1233,12 @@ def soil_evaporation(sp, cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
                      delayed_gdds, senescence,
                      ccx_w, cc_adj, ccx_act, cc, premat_senes,
                      surface_storage, w_surf, evap_z, stage2, w_stage2,
-                     th, et0, infl, prcp, growing_season):
-    """Daily soil evaporation (rainfed: no irrigation/mulches/bunds).
-    Updates ``th`` in place.
+                     th, et0, infl, prcp, irr, irr_method, wet_surf,
+                     growing_season):
+    """Daily soil evaporation (no mulches, no bunds).
+
+    Irrigation other than net (method 4) rearms stage 1 and can wet only
+    ``wet_surf`` percent of the surface. Updates ``th`` in place.
     Returns (e_pot, stage2, w_stage2, w_surf, surface_storage, evap_z,
     es_act)."""
     # prepare stage 2 (first day of simulation == first day of season here,
@@ -1242,8 +1254,8 @@ def soil_evaporation(sp, cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
         if w_stage2 < 0:
             w_stage2 = 0.0
 
-    # prepare stage 1 when rainfall occurs
-    if prcp > 0:
+    # prepare stage 1 when rainfall or (non-net) irrigation occurs
+    if (prcp > 0.0) or ((irr > 0.0) and (irr_method != 4.0)):
         if infl > 0:
             w_surf = infl
             if w_surf > sp[SP_REW]:
@@ -1287,7 +1299,17 @@ def soil_evaporation(sp, cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
     else:
         es_pot = sp[SP_KEX] * et0
 
-    # (no mulches, no irrigation-wetting adjustments in rainfed scope)
+    # mulches stay off; partial wetting applies only to a real irrigation
+    es_pot_mul = es_pot
+    if (irr > 0.0) and (irr_method != 4.0):
+        if (prcp > 1.0) or (surface_storage > 0.0):
+            es_pot_irr = es_pot
+        else:
+            es_pot_irr = es_pot * (wet_surf / 100.0)
+    else:
+        es_pot_irr = es_pot
+    if es_pot_irr < es_pot_mul:
+        es_pot = es_pot_irr
 
     # surface evaporation
     es_act = 0.0
@@ -1439,13 +1461,16 @@ def transpiration(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
                   dap, delayed_cds, age_days, age_days_ns, ccx_w_ns, ccx_w,
                   cc_adj, cc_adj_ns, cc_ns, cc, cc_prev, z_root, r_cor,
                   t_early_sen, surface_storage, day_submerged, aer_days,
-                  tr_ratio, et0, gdd, growing_season):
-    """Crop transpiration (rainfed: irrigation method 0).
+                  tr_ratio, et0, gdd, growing_season,
+                  layer, irr_method, net_irr_smt, irr_net_cum):
+    """Crop transpiration.
 
-    ``max_canopy_cd`` is the per-pixel MaxCanopyCD (calendar days).
-    Updates ``th`` and ``aer_days_comp`` in place.
-    Returns (tr_act, tr_pot_ns, tr_pot0, age_days, age_days_ns,
-    day_submerged, surface_storage, aer_days, tr_ratio, cc, t_pot)."""
+    Method 4 (net irrigation) skips stomatal stress, uses a uniform sink,
+    and refills the root zone to ``net_irr_smt`` after extraction. Every
+    other method keeps the rainfed extraction. Updates ``th`` and
+    ``aer_days_comp`` in place. Returns (tr_act, tr_pot_ns, tr_pot0,
+    age_days, age_days_ns, day_submerged, surface_storage, aer_days,
+    tr_ratio, cc, t_pot, irr_net, irr_net_cum)."""
     if growing_season:
         # 1. potential transpiration, no prior water stress
         dap_adj = dap - delayed_cds
@@ -1544,7 +1569,8 @@ def transpiration(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
         ksa_aer, aer_days = aeration_stress(
             aer_days, cp[CP_LAG_AER], thrz_act, thrz_s, thrz_aer)
         ks = fmin(ksw_sto_lin, ksa_aer)
-        tr_pot = tr_pot * ks
+        if irr_method != 4.0:
+            tr_pot = tr_pot * ks
 
         # compartments covered by the root zone
         rootdepth = roundn(fmax(z_root, cp[CP_ZMIN]), 2)
@@ -1569,15 +1595,19 @@ def transpiration(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
             else:
                 root_fact = 1.0
 
-            # maximum sink term (declines linearly with depth)
-            sx_comp_top = sx_comp_bot
-            if dzsum[comp] <= rootdepth:
-                sx_comp_bot = cp[CP_SX_BOT] * r_cor + (
-                    (cp[CP_SX_TOP] - cp[CP_SX_BOT] * r_cor)
-                    * ((rootdepth - dzsum[comp]) / rootdepth))
+            # maximum sink term. Net irrigation is uniform with depth;
+            # every other method declines linearly.
+            if irr_method == 4.0:
+                sx_comp = (cp[CP_SX_TOP] + cp[CP_SX_BOT]) / 2.0
             else:
-                sx_comp_bot = cp[CP_SX_BOT] * r_cor
-            sx_comp = (sx_comp_top + sx_comp_bot) / 2
+                sx_comp_top = sx_comp_bot
+                if dzsum[comp] <= rootdepth:
+                    sx_comp_bot = cp[CP_SX_BOT] * r_cor + (
+                        (cp[CP_SX_TOP] - cp[CP_SX_BOT] * r_cor)
+                        * ((rootdepth - dzsum[comp]) / rootdepth))
+                else:
+                    sx_comp_bot = cp[CP_SX_BOT] * r_cor
+                sx_comp = (sx_comp_top + sx_comp_bot) / 2.0
 
             # taw for compartment
             th_taw = th_fc[comp] - th_wp[comp]
@@ -1626,9 +1656,11 @@ def transpiration(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
                 aer_comp = 1.0
                 aer_days_comp[comp] = 0.0
 
-            # extract water
+            # extract water. Net irrigation ignores stomatal stress.
             th_to_extract = (to_extract / 1000) / dz[comp]
-            if ks_comp == aer_comp:
+            if irr_method == 4.0:
+                sink = aer_comp * sx_comp * root_fact
+            elif ks_comp == aer_comp:
                 sink = ks_comp * sx_comp * root_fact
             else:
                 sink = fmin(ks_comp, aer_comp) * sx_comp * root_fact
@@ -1644,6 +1676,38 @@ def transpiration(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
             th[comp] = th[comp] - sink
             to_extract = to_extract - (sink * 1000 * dz[comp])
             tr_act = tr_act + (sink * 1000 * dz[comp])
+
+        # net irrigation refills the root zone after extraction
+        irr_net = 0.0
+        if (irr_method == 4.0) and (tr_pot > 0.0):
+            (_wr, _d1, _d2, _t1, _t2,
+             thrz_act_n, _s, thrz_fc_n, thrz_wp_n, _dd, _ae) = root_zone_water(
+                z_root, th, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
+                z_top, cp[CP_ZMIN], cp[CP_AER])
+            th_crit_rz = thrz_wp_n + (
+                (net_irr_smt / 100.0) * (thrz_fc_n - thrz_wp_n))
+            if thrz_act_n < th_crit_rz:
+                prelayer = 0.0
+                th_crit_n = 0.0
+                ii = 0
+                while ii < comp_sto:
+                    layeri = layer[ii]
+                    if layeri > prelayer:
+                        th_crit_n = th_wp[ii] + (
+                            (net_irr_smt / 100.0) * (th_fc[ii] - th_wp[ii]))
+                        prelayer = layeri
+                    if dzsum[ii] > rootdepth:
+                        root_fact_i = 1.0 - ((dzsum[ii] - rootdepth) / dz[ii])
+                    else:
+                        root_fact_i = 1.0
+                    d_wc = (root_fact_i * (th_crit_n - th[ii])
+                            * 1000.0 * dz[ii])
+                    th[ii] = th[ii] + (d_wc / (1000.0 * dz[ii]))
+                    irr_net = irr_net + d_wc
+                    ii = ii + 1
+            irr_net_cum = irr_net_cum + irr_net
+        elif irr_method != 4.0:
+            irr_net_cum = 0.0
 
         # add any surface transpiration
         tr_act = tr_act + tr_act0
@@ -1668,10 +1732,13 @@ def transpiration(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
         tr_act = 0.0
         tr_pot0 = 0.0
         tr_pot_ns = 0.0
+        irr_net = 0.0
+        irr_net_cum = 0.0
 
     t_pot = tr_pot0
     return (tr_act, tr_pot_ns, tr_pot0, age_days, age_days_ns,
-            day_submerged, surface_storage, aer_days, tr_ratio, cc, t_pot)
+            day_submerged, surface_storage, aer_days, tr_ratio, cc, t_pot,
+            irr_net, irr_net_cum)
 
 
 # --------------------------------------------------------------------------
@@ -2162,23 +2229,165 @@ def compute_calendar_cds(cp, tmin2d, tmax2d, p, plant_idx, nt):
 
 
 # --------------------------------------------------------------------------
+# growth stage / irrigation          (solution/growth_stage.py, irrigation.py,
+#                                     pre_irrigation.py)
+# --------------------------------------------------------------------------
+
+@kernel
+def growth_stage(cp, dap, delayed_cds, gdd_cum, delayed_gdds, growing_season):
+    """Growth stage 1–4, used by soil-moisture irrigation thresholds.
+
+    Stage on day D is what irrigation reads on day D+1. Day 1 forces
+    stage 1 inside ``irrigation`` before this update.
+    """
+    if growing_season:
+        if cp[CP_CALENDAR_TYPE] == 1:
+            t_adj = dap - delayed_cds
+        else:
+            t_adj = gdd_cum - delayed_gdds
+        if t_adj <= cp[CP_CANOPY_10PCT]:
+            stage = 1.0
+        elif t_adj <= cp[CP_MAX_CANOPY]:
+            stage = 2.0
+        elif t_adj <= cp[CP_SENESCENCE]:
+            stage = 3.0
+        else:
+            stage = 4.0
+    else:
+        stage = 0.0
+    return stage
+
+
+@kernel
+def pre_irrigation(ip, ncomp, dz, dzsum, th_fc, th_wp, th,
+                   z_root, zmin, dap, growing_season):
+    """Net-irrigation refill on day 1, before drainage. Updates ``th``.
+
+    Compartments stop before the one whose bottom reaches the root
+    depth, matching AquaCrop-OSPy. Returns the depth added (mm).
+    """
+    pre_irr = 0.0
+    if growing_season:
+        if (ip[IP_METHOD] == 4.0) and (dap == 1.0):
+            rootdepth = roundn(fmax(z_root, zmin), 2)
+            comp_rz = first_ge(dzsum, ncomp, rootdepth)
+            ii = 0
+            while ii < comp_rz:
+                th_crit = th_wp[ii] + (
+                    (ip[IP_NET_IRR_SMT] / 100.0) * (th_fc[ii] - th_wp[ii]))
+                if th[ii] < th_crit:
+                    pre_irr = pre_irr + (
+                        (th_crit - th[ii]) * 1000.0 * dz[ii])
+                    th[ii] = th_crit
+                ii = ii + 1
+    return pre_irr
+
+
+@kernel
+def _smt(ip, stage):
+    """Soil-moisture target (%) for growth stage 1–4."""
+    if stage <= 1.0:
+        return ip[IP_SMT0]
+    if stage <= 2.0:
+        return ip[IP_SMT1]
+    if stage <= 3.0:
+        return ip[IP_SMT2]
+    return ip[IP_SMT3]
+
+
+@kernel
+def irrigation(ip, schedule_depth, cp, ncomp, dz, dzsum,
+               th_s, th_fc, th_wp, th_dry, z_top, th, z_root,
+               dap, stage, irr_cum, e_pot, t_pot, prcp, runoff,
+               growing_season):
+    """Irrigation depth for today (mm, gross except method 4).
+
+    ``e_pot`` and ``t_pot`` are yesterday's potentials. ``schedule_depth``
+    is the prescribed depth on this climate day (method 3 only).
+    Returns (stage, irr_cum, irr).
+    """
+    irr = 0.0
+    if growing_season:
+        (_wr, _d1, dr_rz, _t1, taw_rz,
+         thrz_act, _s, thrz_fc, _w, _dd, _ae) = root_zone_water(
+            z_root, th, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
+            z_top, cp[CP_ZMIN], cp[CP_AER])
+        if thrz_act > thrz_fc:
+            rootdepth = fmax(z_root, cp[CP_ZMIN])
+            abv_fc = (thrz_act - thrz_fc) * 1000.0 * rootdepth
+        else:
+            abv_fc = 0.0
+        depletion = dr_rz + t_pot + e_pot - prcp + runoff - abv_fc
+        if dap == 1.0:
+            stage = 1.0
+
+        method = ip[IP_METHOD]
+        if method == 0.0:
+            irr = 0.0
+        elif method == 1.0:
+            if depletion / taw_rz > 1.0 - _smt(ip, stage) / 100.0:
+                irr_req = depletion
+                if irr_req < 0.0:
+                    irr_req = 0.0
+                eff_adj = ((100.0 - ip[IP_APP_EFF]) + 100.0) / 100.0
+                irr = fmin(ip[IP_MAX_IRR], irr_req * eff_adj)
+            else:
+                irr = 0.0
+        elif method == 2.0:
+            n_days = dap - 1.0
+            interval = ip[IP_INTERVAL]
+            due = False
+            if interval > 0.0:
+                rem = n_days - interval * math.floor(n_days / interval)
+                if rem == 0.0:
+                    due = True
+            if due:
+                irr_req = depletion
+                if irr_req < 0.0:
+                    irr_req = 0.0
+                eff_adj = ((100.0 - ip[IP_APP_EFF]) + 100.0) / 100.0
+                irr = fmin(ip[IP_MAX_IRR], irr_req * eff_adj)
+            else:
+                irr = 0.0
+        elif method == 3.0:
+            if schedule_depth < 0.0:
+                schedule_depth = 0.0
+            irr = fmin(ip[IP_MAX_IRR], schedule_depth)
+        elif method == 4.0:
+            irr = 0.0
+        elif method == 5.0:
+            irr = fmin(ip[IP_MAX_IRR], ip[IP_DEPTH])
+        if irr < 0.0:
+            irr = 0.0
+    else:
+        irr = 0.0
+        irr_cum = 0.0
+
+    if irr_cum + irr > ip[IP_MAX_IRR_SEASON]:
+        irr = fmax(0.0, ip[IP_MAX_IRR_SEASON] - irr_cum)
+    irr_cum = irr_cum + irr
+    return stage, irr_cum, irr
+
+
+# --------------------------------------------------------------------------
 # full season for one pixel      (orchestration of timestep/run_single_...)
 # --------------------------------------------------------------------------
 
 @kernel
 def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
-              cp, sp, ncomp, nlayer,
+              cp, sp, ip, schedule, ncomp, nlayer,
               dz, dzsum, th_fc, th_s, th_wp, th_dry, ksat, tau,
               layer, penetrability, th_init,
               th, thnew, flux_out, aer_days_comp,
               evap_time_steps, max_season_days,
               out_final, save_daily, out_daily):
-    """Run a full rainfed AquaCrop season for pixel ``p``.
+    """Run one AquaCrop season for pixel ``p``.
 
-    Weather arrays are (time, npixel); profile arrays are 1-D per-profile
-    views; ``th``/``thnew``/``flux_out``/``aer_days_comp`` are 1-D per-pixel
-    scratch views. Results are written to ``out_final[p, :]`` and,
-    if ``save_daily``, to ``out_daily[:, t, p]``.
+    Weather and ``schedule`` arrays are (time, npixel). ``schedule`` is
+    read only when the irrigation method is 3. Profile arrays are 1-D
+    per-profile views; ``th``/``thnew``/``flux_out``/``aer_days_comp`` are
+    1-D per-pixel scratch views. Results are written to
+    ``out_final[p, :]`` and, if ``save_daily``, to ``out_daily[:, t, p]``.
     """
     # ----- per-pixel crop calendar ------------------------------------
     (cal_ok, maturity_cd, max_canopy_cd, canopy_dev_end_cd,
@@ -2242,6 +2451,10 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
 
     tr_ratio = 1.0
     r_cor = 1.0
+    stage = 0.0
+    irr_cum = 0.0
+    irr_net_cum = 0.0
+    irr_tot = 0.0
 
     cc = 0.0
     cc_adj = 0.0
@@ -2294,6 +2507,11 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
             dap, z_root, delayed_cds, gdd_cum, delayed_gdds, tr_ratio, th,
             cc, cc_ns, germinated, r_cor, t_pot, gdd, growing_season)
 
+        # 3. pre-irrigation (net irrigation, day 1 only)
+        pre_irr = pre_irrigation(
+            ip, ncomp, dz, dzsum, th_fc, th_wp, th,
+            z_root, cp[CP_ZMIN], dap, growing_season)
+
         # 4. drainage (th_fc_adj == th_fc: no groundwater table)
         deep_perc = drainage(
             ncomp, dz, dzsum, th_fc, th_s, tau, ksat, th_fc, th, thnew,
@@ -2304,16 +2522,30 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
             prcp, th, ncomp, dz, dzsum, th_fc, th_wp,
             sp[SP_CN], sp[SP_ADJ_CN], sp[SP_Z_CN], day_submerged)
 
+        # 6. irrigation (e_pot / t_pot are yesterday's values)
+        sched_depth = 0.0
+        if ip[IP_METHOD] == 3.0:
+            sched_depth = schedule[t, p]
+        stage, irr_cum, irr = irrigation(
+            ip, sched_depth, cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
+            sp[SP_Z_TOP], th, z_root, dap, stage, irr_cum,
+            e_pot, t_pot, prcp, runoff, growing_season)
+
         # 7. infiltration
         surface_storage, deep_perc, runoff, infl = infiltration(
             ncomp, dz, th_fc, th_s, tau, ksat, th_fc,
-            th, flux_out, infl, surface_storage, deep_perc, runoff)
+            th, flux_out, infl, surface_storage, deep_perc, runoff,
+            irr, ip[IP_APP_EFF], growing_season)
 
         # 9. germination
         germinated, protected_seed, delayed_cds, delayed_gdds = germination(
             th, ncomp, dz, dzsum, th_fc, th_wp, sp[SP_Z_GERM],
             cp[CP_GERM_THR], cp[CP_PLANT_METHOD] == 1, gdd, growing_season,
             germinated, protected_seed, delayed_cds, delayed_gdds)
+
+        # 10. growth stage (read by irrigation on the next day)
+        stage = growth_stage(
+            cp, dap, delayed_cds, gdd_cum, delayed_gdds, growing_season)
 
         # 11. canopy cover development
         (cc, cc_ns, cc_adj, cc_adj_ns, ccx_act, ccx_act_ns, ccx_w,
@@ -2333,17 +2565,30 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
             evap_time_steps, day_idx, dap, delayed_cds, gdd_cum,
             delayed_gdds, senescence, ccx_w, cc_adj, ccx_act, cc,
             premat_senes, surface_storage, w_surf, evap_z, stage2,
-            w_stage2, th, et0, infl, prcp, growing_season)
+            w_stage2, th, et0, infl, prcp, irr, ip[IP_METHOD], ip[IP_WET_SURF],
+            growing_season)
 
         # 13. crop transpiration
         (tr_act, tr_pot_ns, tr_pot0, age_days, age_days_ns, day_submerged,
-         surface_storage, aer_days, tr_ratio, cc, t_pot) = transpiration(
+         surface_storage, aer_days, tr_ratio, cc, t_pot,
+         irr_net, irr_net_cum) = transpiration(
             cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, sp[SP_Z_TOP],
             th, aer_days_comp, max_canopy_cd,
             dap, delayed_cds, age_days, age_days_ns,
             ccx_w_ns, ccx_w, cc_adj, cc_adj_ns, cc_ns, cc, cc_prev, z_root,
             r_cor, t_early_sen, surface_storage, day_submerged, aer_days,
-            tr_ratio, et0, gdd, growing_season)
+            tr_ratio, et0, gdd, growing_season,
+            layer, ip[IP_METHOD], ip[IP_NET_IRR_SMT], irr_net_cum)
+
+        # 21. pre-irrigation counts toward the net total
+        irr_net = irr_net + pre_irr
+        irr_net_cum = irr_net_cum + pre_irr
+        if ip[IP_METHOD] == 4.0:
+            irr_day = irr_net
+            irr_tot = irr_net_cum
+        else:
+            irr_day = irr
+            irr_tot = irr_cum
 
         # 15. reference harvest index
         hi_ref, yield_form, pct_lag_phase, hi_final = hi_ref_current_day(
@@ -2390,6 +2635,7 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
             out_daily[OD_ES, t, p] = es_act
             out_daily[OD_TR, t, p] = tr_act
             out_daily[OD_WR, t, p] = wr
+            out_daily[OD_IRR, t, p] = irr_day
 
         # end of season?
         if crop_mature or crop_dead or (dap >= max_season_days):
@@ -2411,3 +2657,4 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
     out_final[p, OF_CROP_DEAD] = 1.0 if crop_dead else 0.0
     out_final[p, OF_GERMINATED] = 1.0 if germinated else 0.0
     out_final[p, OF_MATURITY_CD] = maturity_cd
+    out_final[p, OF_IRR_CUM] = irr_tot
