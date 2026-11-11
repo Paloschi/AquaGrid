@@ -6,6 +6,7 @@ See ``docs/zarr-schema.md`` for the full schema definition.
 from aquagrid.io.schema import (
     CLIMATE_VARS,
     open_climate,
+    open_irrigation_schedule,
     open_sowing,
     sowing_to_plant_idx,
     validate_climate,
@@ -23,6 +24,7 @@ from aquagrid.io.synthetic import generate_synthetic
 __all__ = [
     "CLIMATE_VARS",
     "open_climate",
+    "open_irrigation_schedule",
     "open_sowing",
     "sowing_to_plant_idx",
     "validate_climate",

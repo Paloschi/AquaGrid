@@ -24,7 +24,7 @@ def get_runner(parallel: bool = True):
 
 @njit(parallel=True, cache=True)
 def _run_all_parallel(plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
-                      cp, sp, ncomp, nlayer,
+                      cp, sp, ip, schedule, ncomp, nlayer,
                       dz, dzsum, th_fc, th_s, th_wp, th_dry, ksat, tau,
                       layer, penetrability, th_init,
                       th2d, thnew2d, flux2d, aer2d,
@@ -37,7 +37,7 @@ def _run_all_parallel(plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
             out_final[p, OF_STATUS] = STATUS_NOT_SIMULATED
         else:
             _run_pixel(p, pi, nt, tmin2d, tmax2d, prcp2d, et02d,
-                       cp[p], sp[p], ncomp, nlayer,
+                       cp[p], sp[p], ip[p], schedule, ncomp, nlayer,
                        dz, dzsum, th_fc[p], th_s[p], th_wp[p], th_dry[p],
                        ksat[p], tau[p],
                        layer, penetrability[p], th_init[p],
@@ -48,7 +48,7 @@ def _run_all_parallel(plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
 
 @njit(parallel=False, cache=True)
 def _run_all_serial(plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
-                    cp, sp, ncomp, nlayer,
+                    cp, sp, ip, schedule, ncomp, nlayer,
                     dz, dzsum, th_fc, th_s, th_wp, th_dry, ksat, tau,
                     layer, penetrability, th_init,
                     th2d, thnew2d, flux2d, aer2d,
@@ -61,7 +61,7 @@ def _run_all_serial(plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
             out_final[p, OF_STATUS] = STATUS_NOT_SIMULATED
         else:
             _run_pixel(p, pi, nt, tmin2d, tmax2d, prcp2d, et02d,
-                       cp[p], sp[p], ncomp, nlayer,
+                       cp[p], sp[p], ip[p], schedule, ncomp, nlayer,
                        dz, dzsum, th_fc[p], th_s[p], th_wp[p], th_dry[p],
                        ksat[p], tau[p],
                        layer, penetrability[p], th_init[p],
