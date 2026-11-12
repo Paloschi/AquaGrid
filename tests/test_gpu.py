@@ -29,6 +29,14 @@ pytestmark = pytest.mark.skipif(
     reason="no CUDA GPU available (set NUMBA_ENABLE_CUDASIM=1 to simulate)",
 )
 
+from test_parity import (  # noqa: E402
+    IRRIGATION_CASES,
+    _events_frame,
+    assert_ospy_parity,
+    run_grid_kernel,
+    run_reference,
+)
+
 
 @pytest.fixture(scope="module")
 def grid_inputs(weather_df):
@@ -91,3 +99,53 @@ def test_gpu_matches_cpu(grid_inputs):
     assert np.array_equal(np.isnan(day_cpu), np.isnan(day_gpu))
     m = ~np.isnan(day_cpu)
     np.testing.assert_allclose(day_gpu[m], day_cpu[m], rtol=1e-9, atol=1e-9)
+
+
+@pytest.mark.parametrize(
+    "crop_name,soil_name,planting,method,options", IRRIGATION_CASES)
+def test_gpu_irrigation_matches_ospy(weather_df, crop_name, soil_name,
+                                     planting, method, options):
+    """Methods 1–5 match AquaCrop-OSPy on the CUDA kernel, including IrrDay."""
+    from aquacrop import IrrigationManagement
+
+    irrigation = IrrigationManagement(method, **options)
+    model = run_reference(
+        weather_df, crop_name, soil_name, planting, irrigation=irrigation)
+    fin, daily, _nt = run_grid_kernel(
+        weather_df, crop_name, soil_name, planting,
+        irrigation=irrigation, backend="gpu")
+    assert_ospy_parity(model, fin, daily)
+    assert fin[0, C.OF_IRR_CUM] > 0
+
+
+def test_gpu_schedule_matches_ospy(weather_df):
+    from aquacrop import IrrigationManagement
+
+    planting = "2019/05/15"
+    events = [("2019-06-10", 20.0), ("2019-07-20", 15.0), ("2019-08-15", 25.0)]
+    schedule, frame = _events_frame(weather_df, planting, events)
+    irrigation = IrrigationManagement(
+        3, Schedule=frame, MaxIrr=40, AppEff=80, WetSurf=70)
+    model = run_reference(
+        weather_df, "Maize", "SandyLoam", planting, irrigation=irrigation)
+    fin, daily, _nt = run_grid_kernel(
+        weather_df, "Maize", "SandyLoam", planting,
+        irrigation=irrigation, schedule=schedule, backend="gpu")
+    assert_ospy_parity(model, fin, daily)
+    assert fin[0, C.OF_IRR_CUM] == pytest.approx(20 + 15 + 25)
+
+
+def test_gpu_day1_pre_irrigation_matches_ospy(weather_df):
+    from aquacrop import InitialWaterContent, IrrigationManagement
+
+    planting = "2019/06/01"
+    irrigation = IrrigationManagement(4, NetIrrSMT=70)
+    initial = InitialWaterContent(value=["WP"])
+    model = run_reference(
+        weather_df, "SoybeanGDD", "ClayLoam", planting,
+        irrigation=irrigation, initial_wc=initial)
+    fin, daily, _nt = run_grid_kernel(
+        weather_df, "SoybeanGDD", "ClayLoam", planting,
+        irrigation=irrigation, initial_wc="WP", backend="gpu")
+    assert_ospy_parity(model, fin, daily)
+    assert daily[C.OD_IRR, 0, 0] > 1.0
