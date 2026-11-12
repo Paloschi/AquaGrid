@@ -91,7 +91,8 @@ def assert_ospy_parity(model, fin, daily, pixel: int = 0) -> None:
 
 
 def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
-                    planting: str, *, irrigation=None, schedule=None):
+                    planting: str, *, irrigation=None, schedule=None,
+                    initial_wc: str = "FC", backend: str = "cpu"):
     """Run AquaGrid kernels for a single pixel starting at ``planting``."""
     start = pd.Timestamp(planting)
     plant_idx = int((weather_df.Date == start).idxmax())
@@ -104,7 +105,7 @@ def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
     co2 = co2_concentration_for_year(start.year)
     cp = crop_params_array(crop, co2_conc=co2)
     sp, prof = soil_params(soil, zmax=crop.Zmax)
-    thini = initial_water_content(soil, "FC")
+    thini = initial_water_content(soil, initial_wc)
     if irrigation is None:
         ip = default_irrigation_params()
     else:
@@ -118,7 +119,7 @@ def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
         plant_idx=np.array([0], np.int64),
         cp=cp, sp=sp, profile=prof, th_init=thini,
         ip=ip, schedule=schedule,
-        save_daily=True, parallel=False,
+        save_daily=True, parallel=False, backend=backend,
     )
     return fin, daily, nt
 
@@ -198,3 +199,25 @@ def test_schedule_irrigation_parity(weather_df):
         irrigation=irrigation, schedule=schedule)
     assert_ospy_parity(model, fin, daily)
     assert fin[0, C.OF_IRR_CUM] == pytest.approx(20 + 15 + 25)
+
+
+def test_net_irrigation_day1_pre_irrigation(weather_df):
+    """Method 4 fills a dry profile up to NetIrrSMT before drainage.
+
+    Field capacity sits above the target, so the refill only happens
+    when the season starts at wilting point.
+    """
+    from aquacrop import InitialWaterContent, IrrigationManagement
+
+    planting = "2019/06/01"
+    irrigation = IrrigationManagement(4, NetIrrSMT=70)
+    initial = InitialWaterContent(value=["WP"])
+    model = run_reference(
+        weather_df, "SoybeanGDD", "ClayLoam", planting,
+        irrigation=irrigation, initial_wc=initial)
+    fin, daily, _nt = run_grid_kernel(
+        weather_df, "SoybeanGDD", "ClayLoam", planting,
+        irrigation=irrigation, initial_wc="WP")
+    assert_ospy_parity(model, fin, daily)
+    assert daily[C.OD_IRR, 0, 0] > 1.0
+    assert fin[0, C.OF_IRR_CUM] > daily[C.OD_IRR, 0, 0]

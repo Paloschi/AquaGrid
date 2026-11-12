@@ -326,7 +326,7 @@ If you use AquaGrid in research or operational work, please cite this repository
   title   = {AquaGrid: pixel-wise AquaCrop on rasters (Numba CPU/GPU)},
   year    = {2026},
   url     = {https://github.com/Paloschi/aquagrid},
-  version = {0.4.0}
+  version = {0.4.1}
 }
 ```
 

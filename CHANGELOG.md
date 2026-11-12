@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-11
+
+### Added
+
+- Parity tests for irrigation methods 1–5 on the CUDA kernel, and for day-1 pre-irrigation starting at wilting point.
+
 ## [0.4.0] - 2026-11-11
 
 ### Added
@@ -63,7 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial AquaGrid package: zarr climate/sowing in, Numba CPU and GPU
   kernels, YAML CLI, and pytest suite with bit-exact AquaCrop-OSPy parity.
 
-[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Paloschi/aquagrid/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Paloschi/aquagrid/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Paloschi/aquagrid/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Paloschi/aquagrid/compare/v0.3.0...v0.3.1
