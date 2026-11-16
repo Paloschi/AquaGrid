@@ -120,7 +120,8 @@ aquagrid run --config ./data/config.yaml -b gpu     # GPU
 
 Output: `output.zarr` with final yield, biomass and `status` `(y, x)`
 and, with `save_daily: true`, daily series `(time, y, x)` in group
-`daily` (`NaN` outside that pixel's season). Full schema, including
+`daily` (`NaN` outside that pixel's season), including water and
+temperature stress. Full schema, including
 status codes: [`docs/zarr-schema.md`](docs/zarr-schema.md).
 
 ### Programmatic
@@ -326,7 +327,7 @@ If you use AquaGrid in research or operational work, please cite this repository
   title   = {AquaGrid: pixel-wise AquaCrop on rasters (Numba CPU/GPU)},
   year    = {2026},
   url     = {https://github.com/Paloschi/aquagrid},
-  version = {0.4.1}
+  version = {0.5.0}
 }
 ```
 

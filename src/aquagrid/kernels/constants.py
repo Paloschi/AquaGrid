@@ -211,6 +211,13 @@ OD_ES = _p()
 OD_TR = _p()
 OD_WR = _p()
 OD_IRR = _p()
+OD_KSW_EXP = _p()       # canopy expansion; 1 = no stress
+OD_KSW_STO = _p()       # stomatal, transpiration step
+OD_KSW_SEN = _p()       # senescence trigger, canopy step
+OD_KSW_POL = _p()       # pollination, harvest-index step
+OD_KST_POLH = _p()      # heat stress on pollination
+OD_KST_POLC = _p()      # cold stress on pollination
+OD_KS_COLD = _p()       # cold stress on transpiration
 
 OD_N = next(_d)
 

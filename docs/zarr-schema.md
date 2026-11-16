@@ -154,5 +154,20 @@ net irrigation (including day-1 pre-irrigation) for method 4.
 
 Optional daily fields are `(time, y, x)`, float32, in group `daily` of
 the same store: `canopy_cover` (-), `biomass` (g/m²), `z_root` (m),
-`gdd_cum` (°C day), `es` (mm), `tr` (mm), `wr` (mm), `irr` (mm). A day outside that
-pixel's season is `NaN`. A pixel with status 1 or 2 is `NaN` on every day.
+`gdd_cum` (°C day), `es` (mm), `tr` (mm), `wr` (mm), `irr` (mm). Stress
+coefficients are dimensionless, from 0 to 1, where 1 is no stress:
+
+| var | step that applies it |
+|-----|----------------------|
+| `ksw_exp` | canopy expansion, before soil evaporation |
+| `ksw_sen` | senescence trigger, same canopy step |
+| `ksw_sto` | stomatal coefficient at the transpiration step |
+| `ks_cold` | cold stress multiplied into potential transpiration |
+| `ksw_pol` | pollination water stress, after root extraction |
+| `kst_polh` | heat stress on pollination |
+| `kst_polc` | cold stress on pollination |
+
+The four water-stress coefficients are not one snapshot. Soil water
+changes between canopy growth, transpiration and harvest index, and each
+value is the coefficient that step used. A day outside that pixel's
+season is `NaN`. A pixel with status 1 or 2 is `NaN` on every day.

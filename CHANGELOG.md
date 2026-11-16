@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-16
+
+### Added
+
+- Daily water-stress and temperature-stress coefficients (`ksw_exp`, `ksw_sto`, `ksw_sen`, `ksw_pol`, `kst_polh`, `kst_polc`, `ks_cold`) in the `daily` group when `save_daily` is true.
+
 ## [0.4.1] - 2026-11-11
 
 ### Added
@@ -69,7 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial AquaGrid package: zarr climate/sowing in, Numba CPU and GPU
   kernels, YAML CLI, and pytest suite with bit-exact AquaCrop-OSPy parity.
 
-[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Paloschi/aquagrid/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Paloschi/aquagrid/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Paloschi/aquagrid/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Paloschi/aquagrid/compare/v0.3.1...v0.3.2

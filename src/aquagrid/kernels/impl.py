@@ -57,7 +57,8 @@ from aquagrid.kernels.constants import (
     IP_METHOD, IP_WET_SURF, IP_APP_EFF, IP_MAX_IRR, IP_MAX_IRR_SEASON,
     IP_SMT0, IP_SMT1, IP_SMT2, IP_SMT3, IP_INTERVAL, IP_NET_IRR_SMT, IP_DEPTH,
     OD_CANOPY_COVER, OD_BIOMASS, OD_Z_ROOT, OD_GDD_CUM, OD_ES, OD_TR, OD_WR,
-    OD_IRR,
+    OD_IRR, OD_KSW_EXP, OD_KSW_STO, OD_KSW_SEN, OD_KSW_POL,
+    OD_KST_POLH, OD_KST_POLC, OD_KS_COLD,
     STATUS_OK, STATUS_NO_MATURITY_GDD, STATUS_TRUNCATED,
 )
 
@@ -961,7 +962,9 @@ def canopy_cover(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
 
     Returns (cc, cc_ns, cc_adj, cc_adj_ns, ccx_act, ccx_act_ns, ccx_w,
     ccx_w_ns, ccx_early_sen, cc0_adj, cc_prev, protected_seed, premat_senes,
-    t_early_sen, crop_dead).
+    t_early_sen, crop_dead, ksw_exp, ksw_sen). ``ksw_exp`` and ``ksw_sen``
+    are the beta-adjusted coefficients that drive expansion and the
+    senescence trigger.
 
     ``canopy_dev_end``/``senescence``/``maturity`` are passed explicitly so
     the caller can supply the per-pixel effective values.
@@ -975,6 +978,8 @@ def canopy_cover(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
     init_ccx_w = ccx_w
 
     cc_prev = init_cc
+    ksw_exp = math.nan
+    ksw_sen = math.nan
 
     if growing_season:
         # root zone water content
@@ -1194,7 +1199,7 @@ def canopy_cover(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
 
     return (cc, cc_ns, cc_adj, cc_adj_ns, ccx_act, ccx_act_ns, ccx_w,
             ccx_w_ns, ccx_early_sen, cc0_adj, cc_prev, protected_seed,
-            premat_senes, t_early_sen, crop_dead)
+            premat_senes, t_early_sen, crop_dead, ksw_exp, ksw_sen)
 
 
 # --------------------------------------------------------------------------
@@ -1470,7 +1475,11 @@ def transpiration(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
     other method keeps the rainfed extraction. Updates ``th`` and
     ``aer_days_comp`` in place. Returns (tr_act, tr_pot_ns, tr_pot0,
     age_days, age_days_ns, day_submerged, surface_storage, aer_days,
-    tr_ratio, cc, t_pot, irr_net, irr_net_cum)."""
+    tr_ratio, cc, t_pot, irr_net, irr_net_cum, ksw_sto, ks_cold).
+    ``ksw_sto`` is the curved stomatal coefficient; ``ks_cold`` is the
+    cold-stress factor multiplied into potential transpiration."""
+    ksw_sto = math.nan
+    ks_cold = math.nan
     if growing_season:
         # 1. potential transpiration, no prior water stress
         dap_adj = dap - delayed_cds
@@ -1738,7 +1747,7 @@ def transpiration(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
     t_pot = tr_pot0
     return (tr_act, tr_pot_ns, tr_pot0, age_days, age_days_ns,
             day_submerged, surface_storage, aer_days, tr_ratio, cc, t_pot,
-            irr_net, irr_net_cum)
+            irr_net, irr_net_cum, ksw_sto, ks_cold)
 
 
 # --------------------------------------------------------------------------
@@ -2030,10 +2039,15 @@ def harvest_index(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
                   et0, temp_max, temp_min, growing_season):
     """Harvest index build-up.
     Returns (hi, hi_adj, pre_adj, f_pre, f_pol, s_cor1, s_cor2,
-    fpost_upp, fpost_dwn, f_post)."""
+    fpost_upp, fpost_dwn, f_post, ksw_pol, kst_polh, kst_polc).
+    The three stress coefficients are the ones applied to harvest index
+    after the day's root extraction."""
     init_hi = hi
     init_hi_adj = hi_adj
     init_pre_adj = pre_adj
+    ksw_pol = math.nan
+    kst_polh = math.nan
+    kst_polc = math.nan
 
     if growing_season:
         (_wr, dr_zt, dr_rz, taw_zt, taw_rz,
@@ -2102,7 +2116,7 @@ def harvest_index(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
         hi_adj = 0.0
 
     return (hi, hi_adj, pre_adj, f_pre, f_pol, s_cor1, s_cor2,
-            fpost_upp, fpost_dwn, f_post)
+            fpost_upp, fpost_dwn, f_post, ksw_pol, kst_polh, kst_polc)
 
 
 # --------------------------------------------------------------------------
@@ -2550,7 +2564,7 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
         # 11. canopy cover development
         (cc, cc_ns, cc_adj, cc_adj_ns, ccx_act, ccx_act_ns, ccx_w,
          ccx_w_ns, ccx_early_sen, cc0_adj, cc_prev, protected_seed,
-         premat_senes, t_early_sen, crop_dead) = canopy_cover(
+         premat_senes, t_early_sen, crop_dead, ksw_exp, ksw_sen) = canopy_cover(
             cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, sp[SP_Z_TOP],
             th, z_root, gdd, gdd_cum, dap, delayed_cds, delayed_gdds,
             et0, growing_season, canopy_dev_end, senescence, maturity_gdd,
@@ -2571,7 +2585,7 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
         # 13. crop transpiration
         (tr_act, tr_pot_ns, tr_pot0, age_days, age_days_ns, day_submerged,
          surface_storage, aer_days, tr_ratio, cc, t_pot,
-         irr_net, irr_net_cum) = transpiration(
+         irr_net, irr_net_cum, ksw_sto, ks_cold) = transpiration(
             cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, sp[SP_Z_TOP],
             th, aer_days_comp, max_canopy_cd,
             dap, delayed_cds, age_days, age_days_ns,
@@ -2604,7 +2618,7 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
 
         # 17. harvest index
         (hi, hi_adj, pre_adj, f_pre, f_pol, s_cor1, s_cor2,
-         fpost_upp, fpost_dwn, f_post) = harvest_index(
+         fpost_upp, fpost_dwn, f_post, ksw_pol, kst_polh, kst_polc) = harvest_index(
             cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, sp[SP_Z_TOP],
             th, z_root, t_early_sen, hi_start_cd, hi_end_cd, yld_form_cd,
             flowering_cd, canopy_dev_end_cd, dap, delayed_cds, hi_ref,
@@ -2636,6 +2650,13 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
             out_daily[OD_TR, t, p] = tr_act
             out_daily[OD_WR, t, p] = wr
             out_daily[OD_IRR, t, p] = irr_day
+            out_daily[OD_KSW_EXP, t, p] = ksw_exp
+            out_daily[OD_KSW_STO, t, p] = ksw_sto
+            out_daily[OD_KSW_SEN, t, p] = ksw_sen
+            out_daily[OD_KSW_POL, t, p] = ksw_pol
+            out_daily[OD_KST_POLH, t, p] = kst_polh
+            out_daily[OD_KST_POLC, t, p] = kst_polc
+            out_daily[OD_KS_COLD, t, p] = ks_cold
 
         # end of season?
         if crop_mature or crop_dead or (dap >= max_season_days):

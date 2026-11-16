@@ -48,6 +48,13 @@ DAILY_VARS = {
     "tr": C.OD_TR,
     "wr": C.OD_WR,
     "irr": C.OD_IRR,
+    "ksw_exp": C.OD_KSW_EXP,
+    "ksw_sto": C.OD_KSW_STO,
+    "ksw_sen": C.OD_KSW_SEN,
+    "ksw_pol": C.OD_KSW_POL,
+    "kst_polh": C.OD_KST_POLH,
+    "kst_polc": C.OD_KST_POLC,
+    "ks_cold": C.OD_KS_COLD,
 }
 
 
