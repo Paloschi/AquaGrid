@@ -20,6 +20,151 @@ from aquagrid.params import (
 )
 
 
+def _ks_cold(crop, gdd, growing_season):
+    """Cold-stress coefficient on transpiration, as AquaCrop-OSPy computes it."""
+    if not growing_season:
+        return np.nan
+    if crop.TrColdStress == 0:
+        return 1.0
+    if gdd >= crop.GDD_up:
+        return 1.0
+    if gdd <= crop.GDD_lo:
+        return 0.0
+    ks_up = 1.0
+    ks_lo = 0.02
+    fshape = (-1) * np.log(
+        ((ks_lo * ks_up) - 0.98 * ks_lo) / (0.98 * (ks_up - ks_lo)))
+    gdd_rel = (gdd - crop.GDD_lo) / (crop.GDD_up - crop.GDD_lo)
+    ks = (ks_up * ks_lo) / (ks_lo + (ks_up - ks_lo) * np.exp(-fshape * gdd_rel))
+    return float(ks - ks_lo * (1 - gdd_rel))
+
+
+class _StressTrace:
+    """Record the stress coefficients AquaCrop-OSPy applies each day.
+
+    Water-stress coefficients are not one vector: expansion and senescence
+    come from the canopy step, stomatal stress from transpiration, and
+    pollination stress from the harvest-index step after extraction.
+    """
+
+    def __init__(self):
+        self.ksw_exp = []
+        self.ksw_sen = []
+        self.ksw_sto = []
+        self.ksw_pol = []
+        self.kst_polh = []
+        self.kst_polc = []
+        self.ks_cold = []
+        self._canopy = []
+        self._sto = []
+        self._pol = []
+        self._heat = []
+        self._saved = {}
+
+    def install(self):
+        import aquacrop.solution.canopy_cover as cc
+        import aquacrop.solution.harvest_index as hi
+        import aquacrop.solution.transpiration as tr
+        import aquacrop.timestep.run_single_timestep as step
+
+        self._saved = {
+            "cc_ws": cc.water_stress,
+            "tr_ws": tr.water_stress,
+            "hi_ws": hi.water_stress,
+            "hi_ts": hi.temperature_stress,
+            "step_cc": step.canopy_cover,
+            "step_tr": step.transpiration,
+            "step_hi": step.harvest_index,
+        }
+        trace = self
+
+        def cc_ws(*args, **kwargs):
+            out = trace._saved["cc_ws"](*args, **kwargs)
+            beta = kwargs["beta"] if "beta" in kwargs else args[-1]
+            if beta:
+                trace._canopy.append(out)
+            return out
+
+        def canopy(*args, **kwargs):
+            n = len(trace._canopy)
+            out = trace._saved["step_cc"](*args, **kwargs)
+            added = trace._canopy[n:]
+            if added:
+                trace.ksw_exp.append(float(added[0][0]))
+                trace.ksw_sen.append(float(added[0][2]))
+            else:
+                trace.ksw_exp.append(np.nan)
+                trace.ksw_sen.append(np.nan)
+            return out
+
+        def tr_ws(*args, **kwargs):
+            out = trace._saved["tr_ws"](*args, **kwargs)
+            trace._sto.append(float(out[1]))
+            return out
+
+        def transpiration(*args, **kwargs):
+            n = len(trace._sto)
+            crop = kwargs.get("Crop", args[3])
+            growing = kwargs.get("growing_season", args[9])
+            gdd = kwargs.get("gdd", args[10])
+            out = trace._saved["step_tr"](*args, **kwargs)
+            if len(trace._sto) == n:
+                trace.ksw_sto.append(np.nan)
+            else:
+                trace.ksw_sto.append(trace._sto[-1])
+            trace.ks_cold.append(_ks_cold(crop, gdd, growing))
+            return out
+
+        def hi_ws(*args, **kwargs):
+            out = trace._saved["hi_ws"](*args, **kwargs)
+            trace._pol.append(float(out[3]))
+            return out
+
+        def hi_ts(*args, **kwargs):
+            out = trace._saved["hi_ts"](*args, **kwargs)
+            trace._heat.append(out)
+            return out
+
+        def harvest(*args, **kwargs):
+            np_ = len(trace._pol)
+            nh = len(trace._heat)
+            out = trace._saved["step_hi"](*args, **kwargs)
+            if len(trace._pol) == np_:
+                trace.ksw_pol.append(np.nan)
+            else:
+                trace.ksw_pol.append(trace._pol[-1])
+            if len(trace._heat) == nh:
+                trace.kst_polh.append(np.nan)
+                trace.kst_polc.append(np.nan)
+            else:
+                heat, cold = trace._heat[-1]
+                trace.kst_polh.append(float(heat))
+                trace.kst_polc.append(float(cold))
+            return out
+
+        cc.water_stress = cc_ws
+        tr.water_stress = tr_ws
+        hi.water_stress = hi_ws
+        hi.temperature_stress = hi_ts
+        step.canopy_cover = canopy
+        step.transpiration = transpiration
+        step.harvest_index = harvest
+
+    def restore(self):
+        import aquacrop.solution.canopy_cover as cc
+        import aquacrop.solution.harvest_index as hi
+        import aquacrop.solution.transpiration as tr
+        import aquacrop.timestep.run_single_timestep as step
+
+        cc.water_stress = self._saved["cc_ws"]
+        tr.water_stress = self._saved["tr_ws"]
+        hi.water_stress = self._saved["hi_ws"]
+        hi.temperature_stress = self._saved["hi_ts"]
+        step.canopy_cover = self._saved["step_cc"]
+        step.transpiration = self._saved["step_tr"]
+        step.harvest_index = self._saved["step_hi"]
+
+
 def run_reference(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
                   planting: str, *, crop=None, soil=None, initial_wc=None,
                   irrigation=None):
@@ -47,7 +192,13 @@ def run_reference(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
         initial_water_content=initial_wc,
         irrigation_management=irrigation,
     )
-    model.run_model(till_termination=True)
+    trace = _StressTrace()
+    trace.install()
+    try:
+        model.run_model(till_termination=True)
+    finally:
+        trace.restore()
+    model._stress = trace
     return model
 
 
@@ -69,6 +220,13 @@ def assert_ospy_parity(model, fin, daily, pixel: int = 0) -> None:
         (C.OD_TR, flux["Tr"].to_numpy()[:n_days], 1e-12),
         (C.OD_WR, flux["Wr"].to_numpy()[:n_days], 1e-12),
         (C.OD_IRR, flux["IrrDay"].to_numpy()[:n_days], 1e-12),
+        (C.OD_KSW_EXP, np.asarray(model._stress.ksw_exp[:n_days]), 1e-12),
+        (C.OD_KSW_SEN, np.asarray(model._stress.ksw_sen[:n_days]), 1e-12),
+        (C.OD_KSW_STO, np.asarray(model._stress.ksw_sto[:n_days]), 1e-12),
+        (C.OD_KSW_POL, np.asarray(model._stress.ksw_pol[:n_days]), 1e-12),
+        (C.OD_KST_POLH, np.asarray(model._stress.kst_polh[:n_days]), 1e-12),
+        (C.OD_KST_POLC, np.asarray(model._stress.kst_polc[:n_days]), 1e-12),
+        (C.OD_KS_COLD, np.asarray(model._stress.ks_cold[:n_days]), 1e-12),
     )
     for od, ref, atol in daily_pairs:
         np.testing.assert_allclose(
