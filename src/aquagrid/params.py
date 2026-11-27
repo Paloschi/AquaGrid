@@ -483,6 +483,26 @@ def default_irrigation_params() -> np.ndarray:
     return irrigation_params_array(IrrigationManagement(0))
 
 
+def field_params_array(management) -> np.ndarray:
+    """Flatten an aquacrop ``FieldMngt`` into the kernel vector.
+
+    ``z_bund`` is stored in millimetres. ``FieldMngt`` converts the
+    height from metres when it is constructed.
+    """
+    fp = np.zeros(C.FP_N, dtype=np.float64)
+    fp[C.FP_BUNDS] = 1.0 if management.bunds else 0.0
+    fp[C.FP_Z_BUND] = float(management.z_bund)
+    fp[C.FP_BUND_WATER] = float(management.bund_water)
+    return fp
+
+
+def default_field_params() -> np.ndarray:
+    """No bunds. Matches AquaCrop-OSPy ``FieldMngt()``."""
+    from aquacrop import FieldMngt
+
+    return field_params_array(FieldMngt())
+
+
 # Cube layer name -> kernel slot.
 IRRIGATION_PARAM_INDEX: dict[str, int] = {
     "method": C.IP_METHOD,

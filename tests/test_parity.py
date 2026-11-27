@@ -13,7 +13,9 @@ from aquagrid.kernels import constants as C
 from aquagrid.params import (
     co2_concentration_for_year,
     crop_params_array,
+    default_field_params,
     default_irrigation_params,
+    field_params_array,
     initial_water_content,
     irrigation_params_array,
     soil_params,
@@ -167,7 +169,7 @@ class _StressTrace:
 
 def run_reference(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
                   planting: str, *, crop=None, soil=None, initial_wc=None,
-                  irrigation=None):
+                  irrigation=None, field=None):
     """Run original aquacrop from planting date to end of weather.
 
     ``crop`` / ``soil`` override the named presets so a raster profile or a
@@ -191,6 +193,7 @@ def run_reference(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
         crop=crop,
         initial_water_content=initial_wc,
         irrigation_management=irrigation,
+        field_management=field,
     )
     trace = _StressTrace()
     trace.install()
@@ -220,6 +223,8 @@ def assert_ospy_parity(model, fin, daily, pixel: int = 0) -> None:
         (C.OD_TR, flux["Tr"].to_numpy()[:n_days], 1e-12),
         (C.OD_WR, flux["Wr"].to_numpy()[:n_days], 1e-12),
         (C.OD_IRR, flux["IrrDay"].to_numpy()[:n_days], 1e-12),
+        (C.OD_SURFACE_STORAGE, flux["surface_storage"].to_numpy()[:n_days], 1e-12),
+        (C.OD_RUNOFF, flux["Runoff"].to_numpy()[:n_days], 1e-12),
         (C.OD_KSW_EXP, np.asarray(model._stress.ksw_exp[:n_days]), 1e-12),
         (C.OD_KSW_SEN, np.asarray(model._stress.ksw_sen[:n_days]), 1e-12),
         (C.OD_KSW_STO, np.asarray(model._stress.ksw_sto[:n_days]), 1e-12),
@@ -250,7 +255,7 @@ def assert_ospy_parity(model, fin, daily, pixel: int = 0) -> None:
 
 def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
                     planting: str, *, irrigation=None, schedule=None,
-                    initial_wc: str = "FC", backend: str = "cpu"):
+                    initial_wc: str = "FC", field=None, backend: str = "cpu"):
     """Run AquaGrid kernels for a single pixel starting at ``planting``."""
     start = pd.Timestamp(planting)
     plant_idx = int((weather_df.Date == start).idxmax())
@@ -268,6 +273,10 @@ def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
         ip = default_irrigation_params()
     else:
         ip = irrigation_params_array(irrigation)
+    if field is None:
+        fp = default_field_params()
+    else:
+        fp = field_params_array(field)
 
     fin, daily = run_grid_arrays(
         tmin=sub.MinTemp.to_numpy()[:, None],
@@ -276,7 +285,7 @@ def run_grid_kernel(weather_df: pd.DataFrame, crop_name: str, soil_name: str,
         et0=sub.ReferenceET.to_numpy()[:, None],
         plant_idx=np.array([0], np.int64),
         cp=cp, sp=sp, profile=prof, th_init=thini,
-        ip=ip, schedule=schedule,
+        ip=ip, fp=fp, schedule=schedule,
         save_daily=True, parallel=False, backend=backend,
     )
     return fin, daily, nt
@@ -379,3 +388,19 @@ def test_net_irrigation_day1_pre_irrigation(weather_df):
     assert_ospy_parity(model, fin, daily)
     assert daily[C.OD_IRR, 0, 0] > 1.0
     assert fin[0, C.OF_IRR_CUM] > daily[C.OD_IRR, 0, 0]
+
+
+def test_bunds_match_ospy(weather_df):
+    """Bunds drop the curve-number split and pond water up to z_bund."""
+    from aquacrop import FieldMngt
+
+    planting = "2019/05/15"
+    field = FieldMngt(bunds=True, z_bund=0.005, bund_water=40)
+    model = run_reference(
+        weather_df, "Maize", "Clay", planting, field=field)
+    fin, daily, _nt = run_grid_kernel(
+        weather_df, "Maize", "Clay", planting, field=field)
+    assert_ospy_parity(model, fin, daily)
+    flux = model._outputs.water_flux
+    assert float(flux["surface_storage"].max()) > 0.0
+    assert float(flux["Runoff"].sum()) > 0.0

@@ -20,6 +20,7 @@ from aquagrid.params import (
     co2_concentration_for_year,
     crop_params_array,
     default_irrigation_params,
+    field_params_array,
     initial_water_content,
     irrigation_params_array,
     soil_params,
@@ -48,6 +49,8 @@ DAILY_VARS = {
     "tr": C.OD_TR,
     "wr": C.OD_WR,
     "irr": C.OD_IRR,
+    "surface_storage": C.OD_SURFACE_STORAGE,
+    "runoff": C.OD_RUNOFF,
     "ksw_exp": C.OD_KSW_EXP,
     "ksw_sto": C.OD_KSW_STO,
     "ksw_sen": C.OD_KSW_SEN,
@@ -144,6 +147,7 @@ def run_grid(
     evap_time_steps: int = 20,
     max_season_days: int = 400,
     ip: np.ndarray | None = None,
+    fp: np.ndarray | None = None,
     irrigation_zarr: str | Path | None = None,
     irrigation_schedule: str | Path | None = None,
 ) -> Path:
@@ -172,6 +176,9 @@ def run_grid(
     missing layer or a NaN cell keeps the uniform value.
     ``irrigation_schedule`` is a method-3 ``depth`` zarr, mm, dims
     ``(time, y, x)``. It is required when any pixel uses method 3.
+
+    ``fp`` is a uniform field-management vector (``FP_N``,). ``None``
+    leaves bunds off. ``z_bund`` and ``bund_water`` are millimetres.
 
     ``sowing_var`` is the variable in the sowing store (default
     ``sowing``). ``initial_wc`` is ``FC``, ``WP`` or ``SAT`` on either
@@ -287,13 +294,13 @@ def run_grid(
         y1 = min(y0 + tile, ny)
         for x0 in range(0, nx, tile):
             x1 = min(x0 + tile, nx)
-            _run_tile(ds, plant_idx, cp, ip, schedule, soil_ctx, time,
+            _run_tile(ds, plant_idx, cp, ip, fp, schedule, soil_ctx, time,
                       y0, y1, x0, x1, output, backend, save_daily,
                       parallel, evap_time_steps, max_season_days)
     return output
 
 
-def _run_tile(ds, plant_idx, cp, ip, schedule, soil_ctx, time,
+def _run_tile(ds, plant_idx, cp, ip, fp, schedule, soil_ctx, time,
               y0, y1, x0, x1, output, backend, save_daily,
               parallel, evap_time_steps, max_season_days):
     tny, tnx = y1 - y0, x1 - x0
@@ -329,7 +336,7 @@ def _run_tile(ds, plant_idx, cp, ip, schedule, soil_ctx, time,
         tmin=weather["tmin"], tmax=weather["tmax"],
         prcp=weather["precip"], et0=weather["eto"],
         plant_idx=pidx, cp=cp, sp=sp, profile=prof, th_init=thini,
-        ip=ip, schedule=sched,
+        ip=ip, fp=fp, schedule=sched,
         backend=backend, save_daily=save_daily, parallel=parallel,
         evap_time_steps=evap_time_steps, max_season_days=max_season_days,
     )
@@ -382,6 +389,9 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
     - ``irrigation.depth`` (0) — mm each day; method 5
     - ``irrigation.schedule`` — method-3 depth zarr; ``irrigation.zarr``
       — optional per-pixel parameter cube
+    - ``field.bunds`` (false) — pond water behind bunds
+    - ``field.z_bund`` (0) — bund height in metres
+    - ``field.bund_water`` (0) — initial water in the bunds, millimetres
     - ``backend`` (``cpu``) — ``cpu`` or ``gpu``
     - ``options.save_daily`` (false), ``options.tile`` (128),
       ``options.parallel`` (true), ``options.evap_time_steps`` (20),
@@ -399,7 +409,7 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
     scale = soil_cfg.get("scale_factors")
     if scale is not None:
         scale = {str(k).lower(): float(v) for k, v in scale.items()}
-    from aquacrop import IrrigationManagement
+    from aquacrop import FieldMngt, IrrigationManagement
 
     method = int(irr_cfg.get("method", 0))
     irr_kw = {
@@ -415,6 +425,12 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
     if smt is not None:
         irr_kw["SMT"] = [float(value) for value in smt]
     ip = irrigation_params_array(IrrigationManagement(method, **irr_kw))
+    field_cfg = cfg.get("field") or {}
+    fp = field_params_array(FieldMngt(
+        bunds=bool(field_cfg.get("bunds", False)),
+        z_bund=float(field_cfg.get("z_bund", 0)),
+        bund_water=float(field_cfg.get("bund_water", 0)),
+    ))
     return run_grid(
         climate=cfg["climate"],
         sowing=cfg["sowing"],
@@ -434,6 +450,7 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
         evap_time_steps=int(opts.get("evap_time_steps", 20)),
         max_season_days=int(opts.get("max_season_days", 400)),
         ip=ip,
+        fp=fp,
         irrigation_zarr=irr_cfg.get("zarr"),
         irrigation_schedule=irr_cfg.get("schedule"),
     )

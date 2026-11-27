@@ -129,7 +129,11 @@ event. A non-finite cell is read as 0. The kernel indexes this series
 by the climate day, not by days after planting. Method 3 requires the
 schedule. Methods 0, 1, 2, 4 and 5 do not read it.
 
-No bunds, mulches, or groundwater table. One season per pixel.
+No mulches or groundwater table. One season per pixel. Bunds, when
+turned on in the YAML `field` block, pond water up to `z_bund`
+(stored in millimetres; the YAML height is metres). Initial
+`bund_water` (mm) is capped at that height and becomes the season's
+starting surface storage. Water above the bund height runs off.
 
 ## Outputs
 
@@ -154,8 +158,13 @@ net irrigation (including day-1 pre-irrigation) for method 4.
 
 Optional daily fields are `(time, y, x)`, float32, in group `daily` of
 the same store: `canopy_cover` (-), `biomass` (g/m²), `z_root` (m),
-`gdd_cum` (°C day), `es` (mm), `tr` (mm), `wr` (mm), `irr` (mm). Stress
-coefficients are dimensionless, from 0 to 1, where 1 is no stress:
+`gdd_cum` (°C day), `es` (mm), `tr` (mm), `wr` (mm), `irr` (mm),
+`surface_storage` (mm), `runoff` (mm). `surface_storage` is water
+still ponded at the end of the day, after evaporation and
+transpiration; it stays 0 when bunds are off. `runoff` is that day's
+surface runoff. With bunds on, the curve-number split is skipped and
+only water above the bund height runs off. Stress coefficients are
+dimensionless, from 0 to 1, where 1 is no stress:
 
 | var | step that applies it |
 |-----|----------------------|
