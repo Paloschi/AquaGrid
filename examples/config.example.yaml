@@ -25,6 +25,10 @@ irrigation:
   depth: 0                       # method 5, mm applied every day
   schedule: null                 # method 3 depth zarr (time, y, x); null skips it
   zarr: null                     # optional (param, y, x) cube; null skips it
+field:
+  bunds: false                   # pond rain behind bunds; curve-number runoff stays off
+  z_bund: 0                      # bund height (m); the kernel stores millimetres
+  bund_water: 0                  # initial water in the bunds (mm), capped at the height
 
 backend: cpu                     # cpu | gpu
 options:

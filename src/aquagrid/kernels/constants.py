@@ -170,6 +170,20 @@ IP_DEPTH = _q()
 
 IP_N = next(_g)
 
+# ---------------------------------------------------- field-management params
+_h = iter(range(20))
+
+
+def _r() -> int:
+    return next(_h)
+
+
+FP_BUNDS = _r()           # 1 when surface bunds are on
+FP_Z_BUND = _r()          # bund height (mm)
+FP_BUND_WATER = _r()      # initial water height in the bunds (mm)
+
+FP_N = next(_h)
+
 # ------------------------------------------------------------- final outputs
 _k = iter(range(50))
 
@@ -218,6 +232,8 @@ OD_KSW_POL = _p()       # pollination, harvest-index step
 OD_KST_POLH = _p()      # heat stress on pollination
 OD_KST_POLC = _p()      # cold stress on pollination
 OD_KS_COLD = _p()       # cold stress on transpiration
+OD_SURFACE_STORAGE = _p()  # mm ponded behind bunds at the end of the day
+OD_RUNOFF = _p()           # mm of surface runoff that day
 
 OD_N = next(_d)
 

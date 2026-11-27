@@ -71,7 +71,7 @@ started in [CyMP](https://github.com/Paloschi/CyMP) (Unioeste-LEA).
 | Tests      | **pytest** 8 — Ubuntu & Windows, Python 3.11 / 3.12                        |
 
 **Current scope:** one season per pixel, irrigation methods 0–5 (0 is
-rainfed), no groundwater. Soil: a single AquaCrop preset **or** a
+rainfed), optional bunds, no groundwater. Soil: a single AquaCrop preset **or** a
 per-pixel zarr raster (HiHydroSoil hydraulics or sand/silt/clay
 texture).
 
@@ -175,6 +175,10 @@ irrigation:
   depth: 0                       # method 5, mm applied every day
   schedule: null                 # method 3 depth zarr (time, y, x); null skips it
   zarr: null                     # optional (param, y, x) cube; null skips it
+field:
+  bunds: false                   # pond rain behind bunds; curve-number runoff stays off
+  z_bund: 0                      # bund height (m); the kernel stores millimetres
+  bund_water: 0                  # initial water in the bunds (mm), capped at the height
 
 backend: cpu                     # cpu | gpu
 options:
@@ -327,7 +331,7 @@ If you use AquaGrid in research or operational work, please cite this repository
   title   = {AquaGrid: pixel-wise AquaCrop on rasters (Numba CPU/GPU)},
   year    = {2026},
   url     = {https://github.com/Paloschi/aquagrid},
-  version = {0.5.0}
+  version = {0.6.0}
 }
 ```
 

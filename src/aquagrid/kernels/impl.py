@@ -9,8 +9,8 @@ Apache-2.0). Each function is a faithful scalar port of the corresponding
 * read crop/soil parameters from flat float64 arrays indexed by the
   constants in :mod:`aquagrid.kernels.constants`.
 
-Scope: one season per pixel, irrigation methods 0–5, no groundwater
-table, no field management (bunds/mulches). CO2 adjustment is
+Scope: one season per pixel, irrigation methods 0–5, optional bunds,
+no mulches, no groundwater table. CO2 adjustment is
 precomputed on the Python side. Calendar per pixel is computed inside
 the kernel from the pixel's own temperature series (GDD mode) starting
 at its sowing date.
@@ -56,9 +56,10 @@ from aquagrid.kernels.constants import (
     OF_CROP_DEAD, OF_GERMINATED, OF_MATURITY_CD, OF_IRR_CUM,
     IP_METHOD, IP_WET_SURF, IP_APP_EFF, IP_MAX_IRR, IP_MAX_IRR_SEASON,
     IP_SMT0, IP_SMT1, IP_SMT2, IP_SMT3, IP_INTERVAL, IP_NET_IRR_SMT, IP_DEPTH,
+    FP_BUNDS, FP_Z_BUND, FP_BUND_WATER,
     OD_CANOPY_COVER, OD_BIOMASS, OD_Z_ROOT, OD_GDD_CUM, OD_ES, OD_TR, OD_WR,
     OD_IRR, OD_KSW_EXP, OD_KSW_STO, OD_KSW_SEN, OD_KSW_POL,
-    OD_KST_POLH, OD_KST_POLC, OD_KS_COLD,
+    OD_KST_POLH, OD_KST_POLC, OD_KS_COLD, OD_SURFACE_STORAGE, OD_RUNOFF,
     STATUS_OK, STATUS_NO_MATURITY_GDD, STATUS_TRUNCATED,
 )
 
@@ -364,14 +365,38 @@ def drainage(ncomp, dz, dzsum, th_fc, th_s, tau, ksat, th_fc_adj,
 
 
 # --------------------------------------------------------------------------
-# rainfall partition                         (solution/rainfall_partition.py)
+# bunds / rainfall partition        (solution/rainfall_partition.py,
+#                                    timestep/reset_initial_conditions.py)
 # --------------------------------------------------------------------------
 
 @kernel
+def initial_surface_storage(bunds, z_bund, bund_water):
+    """Water ponded at season start.
+
+    When bunds are on and ``z_bund`` is above 0.001 mm, storage is
+    ``bund_water`` capped at the bund height. Otherwise it is zero.
+    """
+    if (bunds != 0.0) and (z_bund > 0.001):
+        if bund_water > z_bund:
+            return z_bund
+        return bund_water
+    return 0.0
+
+
+@kernel
 def rainfall_partition(prcp, th, ncomp, dz, dzsum, th_fc, th_wp,
-                       soil_cn, adj_cn, z_cn, day_submerged):
-    """Partition rainfall into runoff and infiltration (rainfed: no bunds,
-    surface runoff not inhibited). Returns (runoff, infl, day_submerged)."""
+                       soil_cn, adj_cn, z_cn, day_submerged,
+                       bunds, z_bund):
+    """Partition rainfall into runoff and infiltration.
+
+    Bunds (``bunds != 0`` and ``z_bund`` of 0.001 mm or more) produce
+    no curve-number runoff: the whole rainfall infiltrates, and
+    ``day_submerged`` stays as it was. Otherwise surface runoff is not
+    inhibited. Returns (runoff, infl, day_submerged).
+    """
+    if (bunds != 0.0) and (z_bund >= 0.001):
+        return 0.0, prcp, day_submerged
+
     day_submerged = 0.0
     cn = soil_cn
     if adj_cn == 1:  # adjust cn for antecedent moisture
@@ -434,27 +459,48 @@ def rainfall_partition(prcp, th, ncomp, dz, dzsum, th_fc, th_wp,
 @kernel
 def infiltration(ncomp, dz, th_fc, th_s, tau, ksat, th_fc_adj,
                  th, flux_out, infl, surface_storage, deep_perc0, runoff0,
-                 irr, app_eff, growing_season):
-    """Infiltrate rainfall and irrigation (no bunds).
+                 irr, app_eff, growing_season, bunds, z_bund):
+    """Infiltrate rainfall and irrigation.
 
     Gross irrigation is reduced by application efficiency. ``Irr == 0``
-    leaves the rainfed path unchanged. Updates ``th`` and ``flux_out``
-    in place. Returns (surface_storage, deep_perc, runoff_tot, infl)."""
+    leaves the rainfed path unchanged. With bunds on and ``z_bund``
+    above 0.001 mm, water that cannot enter the soil ponds up to the
+    bund height and the excess runs off. Without bunds, that excess
+    runs off immediately and any ponded water is added to runoff.
+    Updates ``th`` and ``flux_out`` in place. Returns
+    (surface_storage, deep_perc, runoff_tot, infl)."""
     init_surface_storage = surface_storage * 1.0
 
     infl = fmax(infl, 0.0)
     if growing_season:
         infl = infl + (irr * (app_eff / 100.0))
 
-    # no bunds on field
-    if infl > ksat[0]:
-        to_store = ksat[0]
-        runoff_ini = infl - ksat[0]
+    if (bunds != 0.0) and (z_bund > 0.001):
+        infl_tot = infl + surface_storage
+        if infl_tot > 0.0:
+            if infl_tot > ksat[0]:
+                to_store = ksat[0]
+                surface_storage = infl_tot - ksat[0]
+            else:
+                to_store = infl_tot
+                surface_storage = 0.0
+            if surface_storage > z_bund:
+                runoff_ini = surface_storage - z_bund
+                surface_storage = z_bund
+            else:
+                runoff_ini = 0.0
+        else:
+            to_store = 0.0
+            runoff_ini = 0.0
     else:
-        to_store = infl
-        runoff_ini = 0.0
-    surface_storage = 0.0
-    runoff_ini = runoff_ini + init_surface_storage
+        if infl > ksat[0]:
+            to_store = ksat[0]
+            runoff_ini = infl - ksat[0]
+        else:
+            to_store = infl
+            runoff_ini = 0.0
+        surface_storage = 0.0
+        runoff_ini = runoff_ini + init_surface_storage
 
     ii = -1
     runoff = 0.0
@@ -532,6 +578,16 @@ def infiltration(ncomp, dz, th_fc, th_s, tau, ksat, th_fc_adj,
         runoff = 0.0
 
     runoff = runoff + runoff_ini
+
+    # water backed up to the surface ponds behind bunds, up to z_bund
+    if runoff > runoff_ini:
+        if (bunds != 0.0) and (z_bund > 0.001):
+            surface_storage = surface_storage + (runoff - runoff_ini)
+            if surface_storage > z_bund:
+                runoff = runoff_ini + (surface_storage - z_bund)
+                surface_storage = z_bund
+            else:
+                runoff = runoff_ini
 
     deep_perc = deep_perc + deep_perc0
     infl = infl - runoff
@@ -1240,7 +1296,7 @@ def soil_evaporation(sp, cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
                      surface_storage, w_surf, evap_z, stage2, w_stage2,
                      th, et0, infl, prcp, irr, irr_method, wet_surf,
                      growing_season):
-    """Daily soil evaporation (no mulches, no bunds).
+    """Daily soil evaporation (no mulches).
 
     Irrigation other than net (method 4) rearms stage 1 and can wet only
     ``wet_surf`` percent of the surface. Updates ``th`` in place.
@@ -2389,7 +2445,7 @@ def irrigation(ip, schedule_depth, cp, ncomp, dz, dzsum,
 
 @kernel
 def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
-              cp, sp, ip, schedule, ncomp, nlayer,
+              cp, sp, ip, fp, schedule, ncomp, nlayer,
               dz, dzsum, th_fc, th_s, th_wp, th_dry, ksat, tau,
               layer, penetrability, th_init,
               th, thnew, flux_out, aer_days_comp,
@@ -2490,7 +2546,8 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
     fresh_yield = 0.0
 
     z_root = 0.0
-    surface_storage = 0.0
+    surface_storage = initial_surface_storage(
+        fp[FP_BUNDS], fp[FP_Z_BUND], fp[FP_BUND_WATER])
     w_surf = 0.0
     evap_z = 0.0
     w_stage2 = 0.0
@@ -2534,7 +2591,8 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
         # 5. surface runoff
         runoff, infl, day_submerged = rainfall_partition(
             prcp, th, ncomp, dz, dzsum, th_fc, th_wp,
-            sp[SP_CN], sp[SP_ADJ_CN], sp[SP_Z_CN], day_submerged)
+            sp[SP_CN], sp[SP_ADJ_CN], sp[SP_Z_CN], day_submerged,
+            fp[FP_BUNDS], fp[FP_Z_BUND])
 
         # 6. irrigation (e_pot / t_pot are yesterday's values)
         sched_depth = 0.0
@@ -2549,7 +2607,8 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
         surface_storage, deep_perc, runoff, infl = infiltration(
             ncomp, dz, th_fc, th_s, tau, ksat, th_fc,
             th, flux_out, infl, surface_storage, deep_perc, runoff,
-            irr, ip[IP_APP_EFF], growing_season)
+            irr, ip[IP_APP_EFF], growing_season,
+            fp[FP_BUNDS], fp[FP_Z_BUND])
 
         # 9. germination
         germinated, protected_seed, delayed_cds, delayed_gdds = germination(
@@ -2650,6 +2709,8 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
             out_daily[OD_TR, t, p] = tr_act
             out_daily[OD_WR, t, p] = wr
             out_daily[OD_IRR, t, p] = irr_day
+            out_daily[OD_SURFACE_STORAGE, t, p] = surface_storage
+            out_daily[OD_RUNOFF, t, p] = runoff
             out_daily[OD_KSW_EXP, t, p] = ksw_exp
             out_daily[OD_KSW_STO, t, p] = ksw_sto
             out_daily[OD_KSW_SEN, t, p] = ksw_sen

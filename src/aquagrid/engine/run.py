@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from aquagrid.kernels.constants import CP_N, IP_N, OD_N, OF_N
-from aquagrid.params import default_irrigation_params
+from aquagrid.kernels.constants import CP_N, FP_N, IP_N, OD_N, OF_N
+from aquagrid.params import default_field_params, default_irrigation_params
 
 _HYDRAULIC = (
     "th_fc", "th_s", "th_wp", "th_dry", "ksat", "tau", "penetrability",
@@ -40,6 +40,7 @@ def run_grid_arrays(
     profile: dict[str, np.ndarray],
     th_init: np.ndarray,
     ip: np.ndarray | None = None,
+    fp: np.ndarray | None = None,
     schedule: np.ndarray | None = None,
     backend: str = "cpu",
     save_daily: bool = False,
@@ -61,6 +62,8 @@ def run_grid_arrays(
         th_init: ``(ncomp,)`` or ``(npixel, ncomp)`` initial θ.
         ip: irrigation parameters, shape (IP_N,) shared or (npixel, IP_N).
             ``None`` is rainfed (method 0).
+        fp: field-management parameters, shape (FP_N,) shared or
+            (npixel, FP_N). ``None`` is no bunds.
         schedule: method-3 depths (mm), shape (time, npixel). ``None``
             is an all-zero schedule. Other methods do not read it.
 
@@ -87,6 +90,11 @@ def run_grid_arrays(
     ip2 = _pixel_rows(ip, npix, "ip")
     if ip2.shape[1] != IP_N:
         raise ValueError(f"ip has {ip2.shape[1]} parameters, expected {IP_N}")
+    if fp is None:
+        fp = default_field_params()
+    fp2 = _pixel_rows(fp, npix, "fp")
+    if fp2.shape[1] != FP_N:
+        raise ValueError(f"fp has {fp2.shape[1]} parameters, expected {FP_N}")
     if schedule is None:
         schedule = np.zeros((nt, npix), f8)
     else:
@@ -117,7 +125,7 @@ def run_grid_arrays(
 
     args = (
         plant_idx, nt, tmin, tmax, prcp, et0,
-        cp2, sp2, ip2, schedule,
+        cp2, sp2, ip2, fp2, schedule,
         ncomp, nlayer,
         geom["dz"], geom["dzsum"],
         hyd["th_fc"], hyd["th_s"], hyd["th_wp"], hyd["th_dry"],
