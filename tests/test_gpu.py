@@ -30,6 +30,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 from test_parity import (  # noqa: E402
+    FIELD_CASES,
     IRRIGATION_CASES,
     _events_frame,
     assert_ospy_parity,
@@ -149,3 +150,22 @@ def test_gpu_day1_pre_irrigation_matches_ospy(weather_df):
         irrigation=irrigation, initial_wc="WP", backend="gpu")
     assert_ospy_parity(model, fin, daily)
     assert daily[C.OD_IRR, 0, 0] > 1.0
+
+
+@pytest.mark.parametrize("name,soil_name,options", FIELD_CASES)
+def test_gpu_field_management_matches_ospy(weather_df, name, soil_name, options):
+    """Field management matches AquaCrop-OSPy on the CUDA kernel."""
+    from aquacrop import FieldMngt
+
+    planting = "2019/05/15"
+    field = FieldMngt(**options)
+    model = run_reference(
+        weather_df, "Maize", soil_name, planting, field=field)
+    fin, daily, _nt = run_grid_kernel(
+        weather_df, "Maize", soil_name, planting,
+        field=field, backend="gpu")
+    assert_ospy_parity(model, fin, daily)
+    if name == "bunds":
+        flux = model._outputs.water_flux
+        assert float(flux["surface_storage"].max()) > 0.0
+        assert float(flux["Runoff"].sum()) > 0.0

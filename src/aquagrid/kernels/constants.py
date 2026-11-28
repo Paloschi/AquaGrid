@@ -181,6 +181,11 @@ def _r() -> int:
 FP_BUNDS = _r()           # 1 when surface bunds are on
 FP_Z_BUND = _r()          # bund height (mm)
 FP_BUND_WATER = _r()      # initial water height in the bunds (mm)
+FP_MULCHES = _r()         # 1 when mulches cover the soil
+FP_MULCH_PCT = _r()       # percent of the surface covered by mulch
+FP_F_MULCH = _r()         # evaporation reduction factor of the mulch
+FP_SR_INHB = _r()         # 1 when practices inhibit curve-number runoff
+FP_CN_ADJ_PCT = _r()      # percent shift of the curve number
 
 FP_N = next(_h)
 

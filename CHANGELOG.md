@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-27
+
+### Fixed
+
+- GPU soil-water updates are assembled without contracted multiply-add, so they round like the CPU kernel and AquaCrop-OSPy.
+
+### Added
+
+- Mulches on soil evaporation, curve-number runoff inhibition, and a curve-number percentage applied before the antecedent-moisture adjustment.
+
 ## [0.6.0] - 2026-11-27
 
 ### Added
@@ -81,7 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial AquaGrid package: zarr climate/sowing in, Numba CPU and GPU
   kernels, YAML CLI, and pytest suite with bit-exact AquaCrop-OSPy parity.
 
-[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Paloschi/aquagrid/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Paloschi/aquagrid/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Paloschi/aquagrid/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Paloschi/aquagrid/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Paloschi/aquagrid/compare/v0.4.0...v0.4.1

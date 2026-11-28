@@ -29,6 +29,11 @@ field:
   bunds: false                   # pond rain behind bunds; curve-number runoff stays off
   z_bund: 0                      # bund height (m); the kernel stores millimetres
   bund_water: 0                  # initial water in the bunds (mm), capped at the height
+  mulches: false                 # reduce soil evaporation where the surface is dry
+  mulch_pct: 50                  # percent of the surface covered by mulch
+  f_mulch: 0.5                   # evaporation reduction factor of the mulch
+  sr_inhb: false                 # inhibit curve-number runoff
+  curve_number_adj_pct: 0        # percent shift applied before antecedent moisture
 
 backend: cpu                     # cpu | gpu
 options:

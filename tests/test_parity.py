@@ -390,17 +390,43 @@ def test_net_irrigation_day1_pre_irrigation(weather_df):
     assert fin[0, C.OF_IRR_CUM] > daily[C.OD_IRR, 0, 0]
 
 
-def test_bunds_match_ospy(weather_df):
-    """Bunds drop the curve-number split and pond water up to z_bund."""
+FIELD_CASES = [
+    ("bunds", "Clay", dict(bunds=True, z_bund=0.005, bund_water=40)),
+    ("mulches", "SandyLoam", dict(mulches=True, mulch_pct=80, f_mulch=0.8)),
+    ("sr_inhb", "SandyLoam", dict(sr_inhb=True)),
+    ("cn_up", "SandyLoam", dict(curve_number_adj_pct=20)),
+    ("cn_down", "SandyLoam", dict(curve_number_adj_pct=-20)),
+]
+
+
+@pytest.mark.parametrize("name,soil_name,options", FIELD_CASES)
+def test_field_management_parity(weather_df, name, soil_name, options):
+    """Bunds, mulches, inhibited runoff and both curve-number shifts."""
     from aquacrop import FieldMngt
 
     planting = "2019/05/15"
-    field = FieldMngt(bunds=True, z_bund=0.005, bund_water=40)
+    field = FieldMngt(**options)
     model = run_reference(
-        weather_df, "Maize", "Clay", planting, field=field)
+        weather_df, "Maize", soil_name, planting, field=field)
     fin, daily, _nt = run_grid_kernel(
-        weather_df, "Maize", "Clay", planting, field=field)
+        weather_df, "Maize", soil_name, planting, field=field)
     assert_ospy_parity(model, fin, daily)
+
+    _fin0, bare, _nt = run_grid_kernel(
+        weather_df, "Maize", soil_name, planting)
+    managed = np.nansum(daily[C.OD_RUNOFF, :, 0])
+    unmanaged = np.nansum(bare[C.OD_RUNOFF, :, 0])
     flux = model._outputs.water_flux
-    assert float(flux["surface_storage"].max()) > 0.0
-    assert float(flux["Runoff"].sum()) > 0.0
+    if name == "bunds":
+        assert float(flux["surface_storage"].max()) > 0.0
+        assert float(flux["Runoff"].sum()) > 0.0
+    elif name == "mulches":
+        assert not np.allclose(
+            daily[C.OD_ES, :, 0], bare[C.OD_ES, :, 0], equal_nan=True)
+    elif name == "sr_inhb":
+        assert managed == 0.0
+        assert unmanaged > 0.0
+    elif name == "cn_up":
+        assert managed > unmanaged
+    else:
+        assert managed < unmanaged

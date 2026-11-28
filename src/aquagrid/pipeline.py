@@ -392,6 +392,11 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
     - ``field.bunds`` (false) — pond water behind bunds
     - ``field.z_bund`` (0) — bund height in metres
     - ``field.bund_water`` (0) — initial water in the bunds, millimetres
+    - ``field.mulches`` (false) — reduce soil evaporation
+    - ``field.mulch_pct`` (50) — percent of the surface covered
+    - ``field.f_mulch`` (0.5) — evaporation reduction factor
+    - ``field.sr_inhb`` (false) — inhibit curve-number runoff
+    - ``field.curve_number_adj_pct`` (0) — percent shift of the curve number
     - ``backend`` (``cpu``) — ``cpu`` or ``gpu``
     - ``options.save_daily`` (false), ``options.tile`` (128),
       ``options.parallel`` (true), ``options.evap_time_steps`` (20),
@@ -430,6 +435,11 @@ def run_from_config(config: str | Path, backend: str | None = None) -> Path:
         bunds=bool(field_cfg.get("bunds", False)),
         z_bund=float(field_cfg.get("z_bund", 0)),
         bund_water=float(field_cfg.get("bund_water", 0)),
+        mulches=bool(field_cfg.get("mulches", False)),
+        mulch_pct=float(field_cfg.get("mulch_pct", 50)),
+        f_mulch=float(field_cfg.get("f_mulch", 0.5)),
+        sr_inhb=bool(field_cfg.get("sr_inhb", False)),
+        curve_number_adj_pct=float(field_cfg.get("curve_number_adj_pct", 0)),
     ))
     return run_grid(
         climate=cfg["climate"],

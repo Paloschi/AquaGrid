@@ -493,11 +493,16 @@ def field_params_array(management) -> np.ndarray:
     fp[C.FP_BUNDS] = 1.0 if management.bunds else 0.0
     fp[C.FP_Z_BUND] = float(management.z_bund)
     fp[C.FP_BUND_WATER] = float(management.bund_water)
+    fp[C.FP_MULCHES] = 1.0 if management.mulches else 0.0
+    fp[C.FP_MULCH_PCT] = float(management.mulch_pct)
+    fp[C.FP_F_MULCH] = float(management.f_mulch)
+    fp[C.FP_SR_INHB] = 1.0 if management.sr_inhb else 0.0
+    fp[C.FP_CN_ADJ_PCT] = float(management.curve_number_adj_pct)
     return fp
 
 
 def default_field_params() -> np.ndarray:
-    """No bunds. Matches AquaCrop-OSPy ``FieldMngt()``."""
+    """Field management off. Matches AquaCrop-OSPy ``FieldMngt()``."""
     from aquacrop import FieldMngt
 
     return field_params_array(FieldMngt())
