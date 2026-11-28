@@ -71,7 +71,7 @@ started in [CyMP](https://github.com/Paloschi/CyMP) (Unioeste-LEA).
 | Tests      | **pytest** 8 — Ubuntu & Windows, Python 3.11 / 3.12                        |
 
 **Current scope:** one season per pixel, irrigation methods 0–5 (0 is
-rainfed), optional bunds, no groundwater. Soil: a single AquaCrop preset **or** a
+rainfed), bunds, mulches and runoff adjustments, no groundwater. Soil: a single AquaCrop preset **or** a
 per-pixel zarr raster (HiHydroSoil hydraulics or sand/silt/clay
 texture).
 
@@ -80,8 +80,9 @@ texture).
 ## Prerequisites
 
 - **Python 3.11 or 3.12**
-- GPU (optional): NVIDIA GPU with a CUDA **driver** — Numba talks to the
-  driver; the full CUDA toolkit is not required
+- GPU (optional): NVIDIA GPU with a CUDA driver, and `ptxas` from the CUDA
+  toolkit. The GPU kernel is assembled with contracted multiply-add turned
+  off so each pixel rounds like the CPU kernel.
 
 ---
 
@@ -179,6 +180,11 @@ field:
   bunds: false                   # pond rain behind bunds; curve-number runoff stays off
   z_bund: 0                      # bund height (m); the kernel stores millimetres
   bund_water: 0                  # initial water in the bunds (mm), capped at the height
+  mulches: false                 # reduce soil evaporation where the surface is dry
+  mulch_pct: 50                  # percent of the surface covered by mulch
+  f_mulch: 0.5                   # evaporation reduction factor of the mulch
+  sr_inhb: false                 # inhibit curve-number runoff
+  curve_number_adj_pct: 0        # percent shift applied before antecedent moisture
 
 backend: cpu                     # cpu | gpu
 options:
@@ -331,7 +337,7 @@ If you use AquaGrid in research or operational work, please cite this repository
   title   = {AquaGrid: pixel-wise AquaCrop on rasters (Numba CPU/GPU)},
   year    = {2026},
   url     = {https://github.com/Paloschi/aquagrid},
-  version = {0.6.0}
+  version = {0.7.0}
 }
 ```
 

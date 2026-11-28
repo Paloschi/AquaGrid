@@ -10,6 +10,7 @@ from __future__ import annotations
 from numba import cuda
 
 from aquagrid.kernels.constants import OF_STATUS, STATUS_NOT_SIMULATED
+from aquagrid.kernels.fp_round import disable_fma_contraction
 from aquagrid.kernels.loader import load_kernels
 
 _KERNEL = None
@@ -23,6 +24,7 @@ def _get_kernel():
 
     ns = load_kernels("gpu")
     run_pixel = ns["run_pixel"]
+    disable_fma_contraction()
 
     @cuda.jit
     def run_all(plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,

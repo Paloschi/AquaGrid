@@ -63,7 +63,7 @@ def run_grid_arrays(
         ip: irrigation parameters, shape (IP_N,) shared or (npixel, IP_N).
             ``None`` is rainfed (method 0).
         fp: field-management parameters, shape (FP_N,) shared or
-            (npixel, FP_N). ``None`` is no bunds.
+            (npixel, FP_N). ``None`` leaves field management off.
         schedule: method-3 depths (mm), shape (time, npixel). ``None``
             is an all-zero schedule. Other methods do not read it.
 

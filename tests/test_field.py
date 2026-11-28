@@ -33,10 +33,19 @@ def _profile():
 
 
 def test_field_params_store_bund_height_in_mm():
-    fp = field_params_array(FieldMngt(bunds=True, z_bund=0.2, bund_water=30))
+    fp = field_params_array(FieldMngt(
+        bunds=True, z_bund=0.2, bund_water=30,
+        mulches=True, mulch_pct=80, f_mulch=0.4,
+        sr_inhb=True, curve_number_adj_pct=-15,
+    ))
     assert fp[C.FP_BUNDS] == 1.0
     assert fp[C.FP_Z_BUND] == 200.0
     assert fp[C.FP_BUND_WATER] == 30.0
+    assert fp[C.FP_MULCHES] == 1.0
+    assert fp[C.FP_MULCH_PCT] == 80.0
+    assert fp[C.FP_F_MULCH] == 0.4
+    assert fp[C.FP_SR_INHB] == 1.0
+    assert fp[C.FP_CN_ADJ_PCT] == -15.0
 
 
 def test_initial_bund_water_is_capped_at_the_bund_height():
@@ -51,7 +60,7 @@ def test_bunds_produce_no_curve_number_runoff():
     th = np.array([0.2])
     runoff, infl, submerged = rainfall_partition(
         50.0, th, 1, prof.dz, prof.dzsum, prof.th_fc, prof.th_wp,
-        77.0, 0.0, 0.3, 4.0, 1.0, 20.0)
+        77.0, 0.0, 0.3, 4.0, 1.0, 20.0, 0.0, 0.0)
     ospy_runoff, ospy_infl, ospy_sub = ospy_rainfall_partition(
         50.0, th, 4, False, True, 20.0, 0.0, 77.0, 0.0, 0.3, 1, prof)
     assert runoff == 0.0
@@ -65,7 +74,7 @@ def test_no_bunds_keeps_the_curve_number_split():
     th = np.array([0.2])
     runoff, infl, submerged = rainfall_partition(
         50.0, th, 1, prof.dz, prof.dzsum.copy(), prof.th_fc, prof.th_wp,
-        77.0, 0.0, 0.3, 4.0, 0.0, 0.0)
+        77.0, 0.0, 0.3, 4.0, 0.0, 0.0, 0.0, 0.0)
     ospy_runoff, ospy_infl, ospy_sub = ospy_rainfall_partition(
         50.0, th, 4, False, False, 0.0, 0.0, 77.0, 0.0, 0.3, 1, prof)
     assert submerged == 0.0
@@ -73,6 +82,35 @@ def test_no_bunds_keeps_the_curve_number_split():
     assert infl == pytest.approx(ospy_infl)
     assert ospy_sub == 0.0
     assert runoff > 0.0
+
+
+def test_inhibited_runoff_skips_the_curve_number():
+    prof = _profile()
+    th = np.array([0.2])
+    runoff, infl, submerged = rainfall_partition(
+        50.0, th, 1, prof.dz, prof.dzsum, prof.th_fc, prof.th_wp,
+        77.0, 0.0, 0.3, 4.0, 0.0, 0.0, 1.0, 0.0)
+    ospy_runoff, ospy_infl, ospy_sub = ospy_rainfall_partition(
+        50.0, th, 4, True, False, 0.0, 0.0, 77.0, 0.0, 0.3, 1, prof)
+    assert runoff == 0.0
+    assert infl == 50.0
+    assert submerged == 4.0
+    assert (runoff, infl, submerged) == (ospy_runoff, ospy_infl, ospy_sub)
+
+
+@pytest.mark.parametrize("pct", [20.0, -20.0])
+def test_curve_number_percent_is_applied_before_the_split(pct):
+    prof = _profile()
+    th = np.array([0.2])
+    runoff, infl, submerged = rainfall_partition(
+        50.0, th, 1, prof.dz, prof.dzsum.copy(), prof.th_fc, prof.th_wp,
+        77.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0, pct)
+    ospy_runoff, ospy_infl, ospy_sub = ospy_rainfall_partition(
+        50.0, th.copy(), 0, False, False, 0.0, pct, 77.0, 0.0, 0.3, 1, prof)
+    assert submerged == 0.0
+    assert runoff == pytest.approx(float(ospy_runoff))
+    assert infl == pytest.approx(float(ospy_infl))
+    assert ospy_sub == 0.0
 
 
 def _infiltrate(surface, infl, z_bund, bunds):

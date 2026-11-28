@@ -9,8 +9,9 @@ Apache-2.0). Each function is a faithful scalar port of the corresponding
 * read crop/soil parameters from flat float64 arrays indexed by the
   constants in :mod:`aquagrid.kernels.constants`.
 
-Scope: one season per pixel, irrigation methods 0–5, optional bunds,
-no mulches, no groundwater table. CO2 adjustment is
+Scope: one season per pixel, irrigation methods 0–5, bunds, mulches,
+runoff inhibition and a curve-number shift. No groundwater table.
+CO2 adjustment is
 precomputed on the Python side. Calendar per pixel is computed inside
 the kernel from the pixel's own temperature series (GDD mode) starting
 at its sowing date.
@@ -56,7 +57,8 @@ from aquagrid.kernels.constants import (
     OF_CROP_DEAD, OF_GERMINATED, OF_MATURITY_CD, OF_IRR_CUM,
     IP_METHOD, IP_WET_SURF, IP_APP_EFF, IP_MAX_IRR, IP_MAX_IRR_SEASON,
     IP_SMT0, IP_SMT1, IP_SMT2, IP_SMT3, IP_INTERVAL, IP_NET_IRR_SMT, IP_DEPTH,
-    FP_BUNDS, FP_Z_BUND, FP_BUND_WATER,
+    FP_BUNDS, FP_Z_BUND, FP_BUND_WATER, FP_MULCHES, FP_MULCH_PCT,
+    FP_F_MULCH, FP_SR_INHB, FP_CN_ADJ_PCT,
     OD_CANOPY_COVER, OD_BIOMASS, OD_Z_ROOT, OD_GDD_CUM, OD_ES, OD_TR, OD_WR,
     OD_IRR, OD_KSW_EXP, OD_KSW_STO, OD_KSW_SEN, OD_KSW_POL,
     OD_KST_POLH, OD_KST_POLC, OD_KS_COLD, OD_SURFACE_STORAGE, OD_RUNOFF,
@@ -386,19 +388,22 @@ def initial_surface_storage(bunds, z_bund, bund_water):
 @kernel
 def rainfall_partition(prcp, th, ncomp, dz, dzsum, th_fc, th_wp,
                        soil_cn, adj_cn, z_cn, day_submerged,
-                       bunds, z_bund):
+                       bunds, z_bund, sr_inhb, cn_adj_pct):
     """Partition rainfall into runoff and infiltration.
 
-    Bunds (``bunds != 0`` and ``z_bund`` of 0.001 mm or more) produce
-    no curve-number runoff: the whole rainfall infiltrates, and
-    ``day_submerged`` stays as it was. Otherwise surface runoff is not
-    inhibited. Returns (runoff, infl, day_submerged).
+    Inhibited runoff (``sr_inhb != 0``), or bunds with ``z_bund`` of
+    0.001 mm or more, produce no curve-number runoff: the whole
+    rainfall infiltrates and ``day_submerged`` stays as it was.
+    Otherwise the curve number is scaled by ``cn_adj_pct`` before the
+    antecedent-moisture adjustment. Returns (runoff, infl,
+    day_submerged).
     """
-    if (bunds != 0.0) and (z_bund >= 0.001):
+    bunds_on = (bunds != 0.0) and (z_bund >= 0.001)
+    if (sr_inhb != 0.0) or bunds_on:
         return 0.0, prcp, day_submerged
 
     day_submerged = 0.0
-    cn = soil_cn
+    cn = soil_cn * (1.0 + (cn_adj_pct / 100.0))
     if adj_cn == 1:  # adjust cn for antecedent moisture
         cn_bot = round_half_even(
             1.4 * (math.exp(-14 * math.log(10.0)))
@@ -1295,11 +1300,15 @@ def soil_evaporation(sp, cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
                      ccx_w, cc_adj, ccx_act, cc, premat_senes,
                      surface_storage, w_surf, evap_z, stage2, w_stage2,
                      th, et0, infl, prcp, irr, irr_method, wet_surf,
-                     growing_season):
-    """Daily soil evaporation (no mulches).
+                     growing_season, mulches, f_mulch, mulch_pct):
+    """Daily soil evaporation.
 
-    Irrigation other than net (method 4) rearms stage 1 and can wet only
-    ``wet_surf`` percent of the surface. Updates ``th`` in place.
+    Mulches scale potential evaporation by
+    ``1 - f_mulch * mulch_pct / 100`` while the surface is dry. A flooded
+    surface skips that reduction. Irrigation other than net (method 4)
+    rearms stage 1 and can wet only ``wet_surf`` percent of the surface.
+    Mulch and partial wetting do not combine: the smaller potential is
+    kept. With mulches off the reduction is 1. Updates ``th`` in place.
     Returns (e_pot, stage2, w_stage2, w_surf, surface_storage, evap_z,
     es_act)."""
     # prepare stage 2 (first day of simulation == first day of season here,
@@ -1360,8 +1369,14 @@ def soil_evaporation(sp, cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
     else:
         es_pot = sp[SP_KEX] * et0
 
-    # mulches stay off; partial wetting applies only to a real irrigation
-    es_pot_mul = es_pot
+    # mulches and partial wetting do not combine; keep the smaller potential
+    if surface_storage < 0.000001:
+        if mulches == 0.0:
+            es_pot_mul = es_pot
+        else:
+            es_pot_mul = es_pot * (1.0 - f_mulch * (mulch_pct / 100.0))
+    else:
+        es_pot_mul = es_pot
     if (irr > 0.0) and (irr_method != 4.0):
         if (prcp > 1.0) or (surface_storage > 0.0):
             es_pot_irr = es_pot
@@ -1371,6 +1386,8 @@ def soil_evaporation(sp, cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry,
         es_pot_irr = es_pot
     if es_pot_irr < es_pot_mul:
         es_pot = es_pot_irr
+    else:
+        es_pot = es_pot_mul
 
     # surface evaporation
     es_act = 0.0
@@ -1739,8 +1756,8 @@ def transpiration(cp, ncomp, dz, dzsum, th_s, th_fc, th_wp, th_dry, z_top,
                     sink = 0.0
 
             th[comp] = th[comp] - sink
-            to_extract = to_extract - (sink * 1000 * dz[comp])
-            tr_act = tr_act + (sink * 1000 * dz[comp])
+            to_extract = to_extract - (sink * 1000.0 * dz[comp])
+            tr_act = tr_act + (sink * 1000.0 * dz[comp])
 
         # net irrigation refills the root zone after extraction
         irr_net = 0.0
@@ -2592,7 +2609,7 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
         runoff, infl, day_submerged = rainfall_partition(
             prcp, th, ncomp, dz, dzsum, th_fc, th_wp,
             sp[SP_CN], sp[SP_ADJ_CN], sp[SP_Z_CN], day_submerged,
-            fp[FP_BUNDS], fp[FP_Z_BUND])
+            fp[FP_BUNDS], fp[FP_Z_BUND], fp[FP_SR_INHB], fp[FP_CN_ADJ_PCT])
 
         # 6. irrigation (e_pot / t_pot are yesterday's values)
         sched_depth = 0.0
@@ -2639,7 +2656,7 @@ def run_pixel(p, plant_idx, nt, tmin2d, tmax2d, prcp2d, et02d,
             delayed_gdds, senescence, ccx_w, cc_adj, ccx_act, cc,
             premat_senes, surface_storage, w_surf, evap_z, stage2,
             w_stage2, th, et0, infl, prcp, irr, ip[IP_METHOD], ip[IP_WET_SURF],
-            growing_season)
+            growing_season, fp[FP_MULCHES], fp[FP_F_MULCH], fp[FP_MULCH_PCT])
 
         # 13. crop transpiration
         (tr_act, tr_pot_ns, tr_pot0, age_days, age_days_ns, day_submerged,

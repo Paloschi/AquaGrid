@@ -129,11 +129,17 @@ event. A non-finite cell is read as 0. The kernel indexes this series
 by the climate day, not by days after planting. Method 3 requires the
 schedule. Methods 0, 1, 2, 4 and 5 do not read it.
 
-No mulches or groundwater table. One season per pixel. Bunds, when
-turned on in the YAML `field` block, pond water up to `z_bund`
+No groundwater table. One season per pixel. The YAML `field` block
+carries bunds, mulches and runoff. Bunds pond water up to `z_bund`
 (stored in millimetres; the YAML height is metres). Initial
 `bund_water` (mm) is capped at that height and becomes the season's
 starting surface storage. Water above the bund height runs off.
+Mulches scale potential soil evaporation by
+`1 - f_mulch * mulch_pct / 100` while the surface is dry, and that
+reduction does not combine with partial irrigation wetting: the
+smaller potential is kept. `sr_inhb` skips the curve-number split.
+`curve_number_adj_pct` shifts the curve number before the
+antecedent-moisture adjustment.
 
 ## Outputs
 
